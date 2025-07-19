@@ -1,0 +1,15 @@
+this is organ-mode
+* hello
+
+* hello
+*** test2
+
+this works?
+
+#+begin_src hi
+  print('hey')
+#+end_src
+
+* does this work
+
+something more
