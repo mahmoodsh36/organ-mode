@@ -2,14 +2,22 @@ this is organ-mode
 * hello
 
 * hello
-*** test2
+*** TODO test2
+CLOSED: [2024-02-04 Sun 13:08:22]
+<2024-02-04 Sun 10:00:00>
 
 this works?
+
+\(latex here\)
+
+\begin{equation}
+some latex
+\end{equation}
 
 #+begin_src hi
   print('hey')
 #+end_src
 
-* does this work
+* DONE does this work
 
 something more

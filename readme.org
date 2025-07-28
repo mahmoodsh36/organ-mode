@@ -1,0 +1,96 @@
+this readme is mostly a placeholder. it will be updated as things progress.
+
+the code is yet to be properly packaged properly for lem.
+
+* preview
+
+[[scrot.png]]
+
+* emphasized ideas and goals
+
+- *extensibility*: the features should be extensible and customizable.
+- *community*: ideally, the features should be liked and inspired by the community's needs. if all goes well, we could eventually make a draft to lem's codebase and get builtin org-mode-like features.
+- *performance*: the code should be performant. the "org-agenda buffer" should load instantly even when it has to parse thousands of files. this is possible by a parser written from scratch in common lisp, which will also be improved even further in the future.
+
+* notes
+
+- most of the functionality for parsing is currently present in ~cltpt~ (the base code for parsing org and other formats).
+- code and features in this repo will be lem-specific, but cltpt will remain editor-independent with a commandline interface.
+- progress is bound to be slow but steady (like it has been for some time now)
+- the goal is not to have a completely faithful, but an /almost faithful/ replication of org-mode features where it matters. the vision of an "improved" version of org-mode is more important than maintaining total compatbility.
+
+* roadmap
+
+a quick reference for org-element support
+| org-element | parsing | highlighting | conversion to html | conversion to latex |
+|-------------+---------+--------------+--------------------+---------------------|
+| headers     | t       | t            |                    |                     |
+| block       | t       |              |                    |                     |
+| inline code | t       |              |                    | t                   |
+| links       | t       |              |                    | t                   |
+| bold        | t       |              |                    |                     |
+| italic      | t       |              |                    | t                   |
+| table       | t       |              |                    |                     |
+| list        | t       |              |                    | t                   |
+
+- [ ] proper packaging for lem
+- [ ] org-element
+  - [ ] latex snippts (display math, inline math, latex environment)
+  - [ ] headers
+  - [ ] special/code blocks
+  - [ ] drawers
+  - [ ] lists
+  - [ ] tables
+  - [ ] italic text
+  - [ ] bold text
+  - [ ] inline code
+  - [ ] top-level keywords
+  - [ ] links
+  - [ ] src-block results
+- [ ] markdown
+  - [ ] headers (including support for agenda TODO data)
+  - [ ] roam links/anchors/titles in markdown
+- [ ] latex
+  - [ ] roam links/anchors/titles
+- [ ] roam (idea from org-roam)
+  - [ ] node navigation
+  - [ ] node links
+    - [ ] links to files
+    - [ ] links to headers
+    - [ ] links to blocks
+  - [ ] backlinks buffer
+- [ ] agenda (idea from org-agenda)
+  - [ ] agenda buffer
+    - [ ] todo navigation
+    - [ ] next/previous week, or more generally display specific date range
+  - [ ] todo state handling/modification for headers
+  - [ ] state history tracking
+- [ ] element folding
+  - [ ] headers
+  - [ ] blocks
+- [ ] babel (idea from org-babel)
+  - [ ] literate programming
+  - [ ] code block tangling
+  - [ ] library of babel
+  - [ ] execution results
+  - [ ] noweb
+  - [ ] sessions
+  - [ ] data pipeline between code blocks, possibly between different languages
+- [ ] buffer navigation by element (headers, blocks, etc)
+- [ ] element-specific/quick actions
+  - [ ] list-specific actions (insert new list item on enter)
+  - [ ] table-specific actions
+    - [ ] new row/column
+    - [ ] delete row/column
+    - [ ] reorganize
+    - [ ] next/previous cell (using tab/shift-tab)
+  - [ ] insert new header
+- [ ] converting (exporting)
+  - [ ] org to latex
+  - [ ] org to html
+  - [ ] org to markdown
+  - [ ] markdown to org
+- [ ] org-clock
+- [ ] latex previews
+- [ ] inline image display
+- [ ] org-attach
