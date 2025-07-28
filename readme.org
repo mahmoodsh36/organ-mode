@@ -2,6 +2,8 @@ this readme is mostly a placeholder. it will be updated as things progress.
 
 the code is yet to be properly packaged properly for lem.
 
+most of the functionality is currently present in https://github.com/mahmoodsh36/cltpt
+
 * preview
 
 [[scrot.png]]
