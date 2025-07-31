@@ -64,13 +64,78 @@
 (defun current-tree ()
   (buffer-value (current-buffer) 'cltpt-tree))
 
+(defmethod child-closest-before-pos ((text-obj cltpt/base:text-object) pos)
+  "find the leaf-most child that is closest to but before the index POS."
+  (let ((best-candidate))
+    (loop for child in (cltpt/base:text-object-children text-obj)
+          do ;; only consider children that end before the target position
+             (when (< (cltpt/base:region-end
+                       (cltpt/base:text-object-text-region child))
+                      pos)
+               ;; recursively search within this child to find the most
+               ;; deeply nested candidate.
+               (let* ((recursive-candidate (child-closest-before-pos child pos))
+                      ;; the best candidate from this branch is either the deeper one we just found,
+                      ;; or if there isn't one, the child itself.
+                      (current-candidate (or recursive-candidate child)))
+                 ;; compare this branch's candidate with the best one we've found so far.
+                 (if (null best-candidate)
+                     (setf best-candidate current-candidate)
+                     (when (> (cltpt/base:region-end
+                               (cltpt/base:text-object-text-region
+                                current-candidate))
+                              (cltpt/base:region-end
+                               (cltpt/base:text-object-text-region
+                                best-candidate)))
+                       (setf best-candidate current-candidate))))))
+    best-candidate))
+
+(defmethod child-closest-after-pos ((text-obj cltpt/base:text-object) pos)
+  "find the leaf-most child that is closest to but after the index POS."
+  (let ((best-candidate))
+    (loop for child in (cltpt/base:text-object-children text-obj)
+          do ;; only consider children that start after the target position
+             (when (> (cltpt/base:region-begin
+                       (cltpt/base:text-object-text-region child))
+                      pos)
+               ;; recursively search within this child to find the most
+               ;; deeply nested candidate.
+               (let* ((recursive-candidate (child-closest-after-pos child pos))
+                      ;; the best candidate from this branch is either the deeper one we just found,
+                      ;; or if there isn't one, the child itself.
+                      (current-candidate (or recursive-candidate child)))
+                 ;; compare this branch's candidate with the best one we've found so far.
+                 (if (null best-candidate)
+                     (setf best-candidate current-candidate)
+                     (when (< (cltpt/base:region-begin
+                               (cltpt/base:text-object-text-region
+                                current-candidate))
+                              (cltpt/base:region-begin
+                               (cltpt/base:text-object-text-region
+                                best-candidate)))
+                       (setf best-candidate current-candidate))))))
+    best-candidate))
+
 (define-command organ-next-element () ()
   (let* ((tr (current-tree))
-        (pt (lem:position-at-point (lem:current-point)))
-        (parent))
-    (lem:message "got ~A" pt)))
+         (pos (1- (lem:position-at-point (lem:current-point))))
+         (next (child-closest-after-pos tr pos))
+         (new-pos (when next (cltpt/base:text-object-begin-in-root next))))
+    (when new-pos
+      (lem:move-point (lem:current-point)
+                      (organ/utils:char-offset-to-point
+                       (lem:current-buffer)
+                       new-pos)))))
 
 (define-command organ-prev-element () ()
-  )
+  (let* ((tr (current-tree))
+         (pos (1- (lem:position-at-point (lem:current-point))))
+         (prev (child-closest-before-pos tr pos))
+         (new-pos (when prev (cltpt/base:text-object-begin-in-root prev))))
+    (when new-pos
+      (lem:move-point (lem:current-point)
+                      (organ/utils:char-offset-to-point
+                       (lem:current-buffer)
+                       new-pos)))))
 
 (define-file-type ("org") organ-mode)

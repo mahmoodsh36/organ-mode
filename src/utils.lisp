@@ -7,7 +7,3 @@
   (let ((start (lem:copy-point (lem:buffer-start-point buf))))
     (lem:character-offset start offset)
     start))
-
-(defun point-to-char-offset (buf point)
-  (lem:character-offset start offset)
-  start)
