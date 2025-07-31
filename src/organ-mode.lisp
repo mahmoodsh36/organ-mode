@@ -3,20 +3,23 @@
   (:export :organ-mode))
 (in-package :organ-mode)
 
-;; (defun make-tmlanguage-organ ()
-;;   (let* ((patterns (make-tm-patterns
-;;                     (make-tm-match "^#\\+.*$"
-;;                                    :name 'syntax-builtin-attribute))))
-;;     (make-tmlanguage :patterns patterns)))
+(defvar *organ-mode-keymap*
+  (make-keymap :name '*organ-mode-keymap* :parent *global-keymap*))
+(defvar *organ-mode-navigation-keymap*
+  (make-keymap :name '*organ-mode-keymap* :parent *global-keymap*))
+
+(define-key *organ-mode-keymap* "C-l" *organ-mode-navigation-keymap*)
+(define-keys *organ-mode-navigation-keymap*
+  ("n" 'organ-next-element)
+  ("p" 'organ-prev-element)
+  )
 
 (defvar *organ-syntax-table*
   (let ((table (make-syntax-table)))
     table))
 
 (defvar *organ-mode-hook*
-  '((organ-mode-init-all . 0))
-  "The list of functions to be called when my-cool-mode is activated.
-This is a customizable hook.")
+  '((organ-mode-init-all . 0)))
 
 (define-major-mode organ-mode language-mode
   (:name "organ-mode"
@@ -26,6 +29,7 @@ This is a customizable hook.")
   (setf (variable-value 'enable-syntax-highlight) t))
 
 (defun organ-mode-init-all ()
+  "called when organ-mode is started, adds modification hooks to reparse buffer."
   (update-tree nil nil nil)
   (let ((buf (lem:current-buffer)))
     (lem:add-hook
@@ -40,6 +44,7 @@ This is a customizable hook.")
                     (lem:make-attribute :background color-string)))
 
 (defun update-tree (start-point end-point length)
+  "updates the organ-mode AST of the current buffer."
   (let* ((buf (lem:current-buffer))
          (buffer-contents (lem:buffer-text buf))
          (cltpt-tree (cltpt/base:parse buffer-contents
@@ -56,47 +61,16 @@ This is a customizable hook.")
     ;;              (length (lem:buffer-text buf)))
     ))
 
-(defun string-starts-with-p (prefix string)
-  (let ((len (length prefix)))
-    (and (<= len (length string))
-         (string= prefix (subseq string 0 len)))))
+(defun current-tree ()
+  (buffer-value (current-buffer) 'cltpt-tree))
 
-(define-command roam-find () ()
-  (let* ((rmr (organ-roamer))
-         (items
-           (mapcar
-            (lambda (node)
-              (if (cltpt/roam:node-text-obj node)
-                  (lem/completion-mode:make-completion-item
-                   :label (cltpt/roam:node-title node)
-                   :detail (symbol-name (class-name (class-of (cltpt/roam:node-text-obj node)))))
-                  (lem/completion-mode:make-completion-item
-                   :label (cltpt/roam:node-title node))))
-            (cltpt/roam:roamer-nodes rmr))))
-    (lem:prompt-for-string
-     "roam-find (node) "
-     :completion-function
-     (lambda (str1)
-       (remove-if-not
-        (lambda (item)
-          (string-starts-with-p str1 (lem/completion-mode:completion-item-label item)))
-        items)))))
+(define-command organ-next-element () ()
+  (let* ((tr (current-tree))
+        (pt (lem:position-at-point (lem:current-point)))
+        (parent))
+    (lem:message "got ~A" pt)))
 
-(defun organ-roamer ()
-  (let* ((rmr (cltpt/roam:from-files
-               '((:path ("/home/mahmooz/brain/notes/")
-                  :regex ".*\\.org"
-                  :format "org-mode")))))
-    rmr))
-
-(define-command open-agenda () ()
-  (organ/agenda::my-show-weekly-agenda))
-
-(defun organ-setup-keys ()
-  (define-key *global-keymap* "C-c a" 'open-agenda)
-  (define-key *global-keymap* "C-c r" 'roam-find)
+(define-command organ-prev-element () ()
   )
-
-(organ-setup-keys)
 
 (define-file-type ("org") organ-mode)

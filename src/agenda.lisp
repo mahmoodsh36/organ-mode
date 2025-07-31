@@ -1,7 +1,11 @@
 (defpackage :organ/agenda
   (:use :cl :lem)
-  (:export))
+  (:export :show-agenda-buffer))
 (in-package :organ/agenda)
+
+(defvar *days-to-show*
+  14
+  "number of days to be in the organ-agenda buffer by default.")
 
 (defun start-of-day (timestamp)
   "returns a new timestamp set to the beginning of the day (00:00:00)."
@@ -107,9 +111,6 @@
         (cons (list :type :day-header :date current-day)
               (sort-day-items all-day-items today))))))
 
-(defvar *agenda-draw-time* nil
-  "dynamically bound 'now' timestamp during the drawing process.")
-
 (defgeneric draw-agenda-item (item point)
   (:documentation "generic function to draw an agenda item at a given point.")
   (:method :after (item point)
@@ -166,7 +167,7 @@
          (timed (cltpt/agenda:todo-timed item))
          (start-prop (copy-point point :temporary))
          (todo-ts (or scheduled deadline timed))
-         (today-start (start-of-day *agenda-draw-time*))
+         (today-start (start-of-day (local-time:now)))
          (days-ago (when (and todo-ts (local-time:timestamp< todo-ts today-start))
                      (floor (/ (local-time:timestamp-difference today-start todo-ts)
                                86400))))
@@ -220,8 +221,7 @@
 
 (defun draw-agenda-to-buffer (buffer todos begin-date end-date)
   "wipes and redraws the agenda view for a given date range."
-  (let ((point (buffer-point buffer))
-        (*agenda-draw-time* (local-time:now)))
+  (let ((point (buffer-point buffer)))
     (with-buffer-read-only buffer nil
       (erase-buffer buffer)
       (let ((items-to-draw (prepare-agenda-display-list todos begin-date end-date)))
@@ -235,22 +235,19 @@
          (agenda (buffer-value buffer 'agenda))
          (begin-date (buffer-value buffer 'begin-date))
          (end-date (buffer-value buffer 'end-date)))
-    (unless (equal (buffer-major-mode buffer) 'organ-agenda-mode)
-      (editor-error "Not in an organ-agenda buffer"))
-    (message "Reloading agenda from ~a..." source-file)
     (let* ((todos (cltpt/agenda:agenda-todos agenda)))
       (draw-agenda-to-buffer buffer todos begin-date end-date)
-      (message "Reloading agenda... done."))))
+      (message "reloaded agenda."))))
+
+(define-command organ-agenda-quit () ()
+  (delete-buffer (current-buffer)))
 
 (define-key *organ-agenda-mode-keymap* "g" 'organ-agenda-reload)
-(define-key *organ-agenda-mode-keymap* "q" 'lem:quit-window)
+(define-key *organ-agenda-mode-keymap* "q" 'organ-agenda-quit)
 
-(defun show-weekly-agenda ()
-  (let* ((rmr (cltpt/roam:from-files
-               '((:path "/home/mahmooz/work/cltpt/test.org"
-                  :regex ".*\\.org"
-                  :format "org-mode"))))
-         (agenda (cltpt/agenda:from-roamer rmr))
+(defun show-agenda-buffer (rmr)
+  "takes an instance of cltpt/roam:roamer RMR, opens the agenda buffer."
+  (let* ((agenda (cltpt/agenda:from-roamer rmr))
          (start-date (local-time:now))
-         (end-date (local-time:timestamp+ start-date 5 :day)))
+         (end-date (local-time:timestamp+ start-date *days-to-show* :day)))
     (show-agenda-view agenda start-date end-date)))

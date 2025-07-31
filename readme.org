@@ -24,16 +24,19 @@ most of the functionality is currently present in https://github.com/mahmoodsh36
 * roadmap
 
 a quick reference for org-element support
-| org-element | parsing | highlighting | conversion to html | conversion to latex |
-|-------------+---------+--------------+--------------------+---------------------|
-| headers     | t       | t            |                    |                     |
-| block       | t       |              |                    |                     |
-| inline code | t       |              |                    | t                   |
-| links       | t       |              |                    | t                   |
-| bold        | t       |              |                    |                     |
-| italic      | t       |              |                    | t                   |
-| table       | t       |              |                    |                     |
-| list        | t       |              |                    | t                   |
+| org-element  | parsing | highlighting | conversion to html | conversion to latex |
+|--------------+---------+--------------+--------------------+---------------------|
+| headers      | t       | t            |                    | t                   |
+| block        | t       | t            |                    | t                   |
+| inline code  | t       |              |                    | t                   |
+| links        | t       |              |                    | t                   |
+| bold         | t       |              |                    | t                   |
+| italic       | t       |              |                    | t                   |
+| table        | t       |              |                    | t                   |
+| list         | t       |              |                    | t                   |
+| inline math  | t       | t            |                    | t                   |
+| display math | t       |              |                    | t                   |
+| latex env    | t       | t            |                    | t                   |
 
 - [ ] proper packaging for lem
 - [ ] org-element
@@ -96,3 +99,24 @@ a quick reference for org-element support
 - [ ] latex previews
 - [ ] inline image display
 - [ ] org-attach
+
+* documentation
+** organ-roam
+- node roamer (find headers/files/etc) can be started using ~C-c r~.
+related variables:
+| variable      | description                                                                |
+|---------------+----------------------------------------------------------------------------|
+| *organ-files* | a set of rules for finding files. see docstring of ~cltpt/roam:find-files~ |
+|               |                                                                            |
+** organ-agenda
+once the variable ~*organ-files*~ has been customized, organ-agenda can be opened using ~C-c a~.
+default keybindings:
+| variable | description |
+|----------+-------------|
+|          |             |
+|          |             |
+related variables:
+| variable       | description                                            |
+|----------------+--------------------------------------------------------|
+| *days-to-show* | number of days to show by default in the agenda buffer |
+|                |                                                        |

@@ -28,8 +28,8 @@
          (submatch-begin (getf submatch :begin))
          (submatch-end (getf submatch :end)))
     (when submatch
-      (lem:make-overlay (char-offset-to-point buf submatch-begin)
-                        (char-offset-to-point buf submatch-end)
+      (lem:make-overlay (organ/utils:char-offset-to-point buf submatch-begin)
+                        (organ/utils:char-offset-to-point buf submatch-end)
                         attribute))))
 
 ;; like `overlay-for-submatch', except that it acts on all submatches found by id
@@ -41,8 +41,8 @@
           for submatch-begin = (getf (car submatch) :begin)
           for submatch-end = (getf (car submatch) :end)
           collect (lem:make-overlay
-                   (char-offset-to-point buf submatch-begin)
-                   (char-offset-to-point buf submatch-end)
+                   (organ/utils:char-offset-to-point buf submatch-begin)
+                   (organ/utils:char-offset-to-point buf submatch-end)
                    attribute))))
 
 ;; default function for syntax highlighting.
@@ -51,8 +51,8 @@
     (let ((begin (cltpt/base:text-object-begin-in-root obj))
           (end (cltpt/base:text-object-end-in-root obj)))
       (list
-       (lem:make-overlay (char-offset-to-point buf begin)
-                         (char-offset-to-point buf end)
+       (lem:make-overlay (organ/utils:char-offset-to-point buf begin)
+                         (organ/utils:char-offset-to-point buf end)
                          (lem:make-attribute :foreground  "#FFFACD"))))))
 
 ;; consult cltpt/org-mode:*org-header-rule*
@@ -80,8 +80,3 @@
   (list
    (overlay-for-submatch buf obj 'cltpt/org-mode::begin *block-attribute*)
    (overlay-for-submatch buf obj 'cltpt/org-mode::end *block-attribute*)))
-
-(defun char-offset-to-point (buf offset)
-  (let ((start (lem:copy-point (lem:buffer-start-point buf))))
-    (lem:character-offset start offset)
-    start))
