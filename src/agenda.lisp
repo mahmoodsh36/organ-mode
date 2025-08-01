@@ -225,6 +225,7 @@
     (with-buffer-read-only buffer nil
       (erase-buffer buffer)
       (let ((items-to-draw (prepare-agenda-display-list todos begin-date end-date)))
+        (setf (buffer-value buffer 'items) items-to-draw)
         (dolist (item items-to-draw)
           (draw-agenda-item item point))))
     (buffer-start point)))
@@ -242,8 +243,50 @@
 (define-command organ-agenda-quit () ()
   (delete-buffer (current-buffer)))
 
+(define-command organ-agenda-next () ()
+  (let ((idx (1- (lem/buffer/internal::point-linum (lem:current-point))))
+        (items (buffer-value (lem:current-buffer) 'items))
+        (next-todo-idx))
+    (loop for item in (subseq items (1+ idx)) for i from (1+ idx)
+          do (when (typep item 'cltpt/agenda:todo)
+               (setf next-todo-idx i)
+               (return)))
+    (when next-todo-idx
+      (lem:move-point (lem:current-point)
+                      (lem:move-to-line
+                       (lem:copy-point (lem:current-point) :temporary)
+                       (1+ next-todo-idx))))))
+
+(define-command organ-agenda-prev () ()
+  (let ((idx (1- (lem/buffer/internal::point-linum (lem:current-point))))
+        (items (buffer-value (lem:current-buffer) 'items))
+        (prev-todo-idx))
+    (loop for item in (reverse (subseq items 0 idx))
+          for i from (1- idx) downto 0
+          do (when (typep item 'cltpt/agenda:todo)
+               (setf prev-todo-idx i)
+               (return)))
+    (when prev-todo-idx
+      (lem:move-point (lem:current-point)
+                      (lem:move-to-line
+                       (lem:copy-point (lem:current-point) :temporary)
+                       (1+ prev-todo-idx))))))
+
+(defun current-item ()
+  (let ((idx (1- (lem/buffer/internal::point-linum (lem:current-point))))
+        (items (buffer-value (lem:current-buffer) 'items)))
+    (elt items idx)))
+
+(define-command organ-agenda-open () ()
+  (let ((item (current-item)))
+    (when item
+      (lem:find-file (cltpt/roam:node-file (cltpt/agenda:todo-node item))))))
+
 (define-key *organ-agenda-mode-keymap* "g" 'organ-agenda-reload)
 (define-key *organ-agenda-mode-keymap* "q" 'organ-agenda-quit)
+(define-key *organ-agenda-mode-keymap* "n" 'organ-agenda-next)
+(define-key *organ-agenda-mode-keymap* "p" 'organ-agenda-prev)
+(define-key *organ-agenda-mode-keymap* "Return" 'organ-agenda-open)
 
 (defun show-agenda-buffer (rmr)
   "takes an instance of cltpt/roam:roamer RMR, opens the agenda buffer."
