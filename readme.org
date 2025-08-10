@@ -24,6 +24,11 @@ In this file add:
 (ql:quickload :organ-mode)
 #+END_SRC
 
+** Problems
+
+If you run into problems, some people have had better luck putting the organ-mode folder and its dependencies in
+=~/common-lisp/lem/.qlot/local-projects=
+
 * preview
 
 [[scrot.png]]
