@@ -4,6 +4,25 @@ the code is yet to be properly packaged properly for lem.
 
 most of the functionality is currently present in https://github.com/mahmoodsh36/cltpt
 
+* Installing
+
+You will need [[https://www.quicklisp.org/beta/][quicklisp]] installed before you 
+Currently you can install it by doing the following:
+
+#+BEGIN_SRC bash
+cd ~/common-lisp
+git clone https://github.com/mahmoodsh36/organ-mode.git
+git clone https://github.com/mahmoodsh36/cltpt
+#+END_SRC
+
+Then open your Lem init file (this is usually located in src_{~/.lem/init.lisp}
+
+In this file add:
+
+#+BEGIN_SRC lisp
+(ql:quickload :organ-mode)
+#+END_SRC
+
 * preview
 
 [[scrot.png]]
