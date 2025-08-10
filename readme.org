@@ -15,7 +15,7 @@ git clone https://github.com/mahmoodsh36/organ-mode.git
 git clone https://github.com/mahmoodsh36/cltpt
 #+END_SRC
 
-Then open your Lem init file (this is usually located in =~/.lem/init.lisp}=
+Then open your Lem init file (this is usually located in =~/.lem/init.lisp=
 
 In this file add:
 
