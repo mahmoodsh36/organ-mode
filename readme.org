@@ -6,8 +6,9 @@ most of the functionality is currently present in https://github.com/mahmoodsh36
 
 * Installing
 
-You will need [[https://www.quicklisp.org/beta/][quicklisp]] installed before you 
-Currently you can install it by doing the following:
+You will need [[https://www.quicklisp.org/beta/][quicklisp]] installed first.
+
+Once it is installed, do the following:
 
 #+BEGIN_SRC bash
 cd ~/common-lisp
