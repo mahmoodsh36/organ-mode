@@ -62,6 +62,9 @@ a quick reference for org-element support
 | inline math  | t       | t            |                    | t                   |
 | display math | t       |              |                    | t                   |
 | latex env    | t       | t            |                    | t                   |
+| comment      |         |              |                    |                     |
+| src results  |         |              |                    |                     |
+| org-cite     |         |              |                    |                     |
 
 - [ ] proper packaging for lem
 - [ ] org-element
