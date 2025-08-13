@@ -38,11 +38,6 @@
       :buffer buf)
      'update-tree)))
 
-(defun highlight-region (start-point end-point color-string)
-  (lem:make-overlay start-point
-                    end-point
-                    (lem:make-attribute :background color-string)))
-
 (defun update-tree (start-point end-point length)
   "updates the organ-mode AST of the current buffer."
   (let* ((buf (lem:current-buffer))
