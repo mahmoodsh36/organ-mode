@@ -46,11 +46,7 @@
                                        (cltpt/org-mode:org-mode-text-object-types)
                                        :doc-type 'cltpt/org-mode::org-document)))
     (setf (buffer-value buf 'cltpt-tree) cltpt-tree)
-    (lem:clear-overlays buf)
-    (cltpt/base:map-text-object
-     cltpt-tree
-     (lambda (obj)
-       (loop for overlay in (text-object-lem-overlays obj buf))))
+    (organ-redraw-buffer buf)
     ;; (lem:message "custom syntax highlighting triggered in ~A, size is ~A"
     ;;              (lem:buffer-name buf)
     ;;              (length (lem:buffer-text buf)))

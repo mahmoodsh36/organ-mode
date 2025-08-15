@@ -15,9 +15,22 @@
 (defvar *block-attribute*
   (lem:make-attribute :foreground  "#FFFACD"))
 
+(defvar *default-attribute*
+  (lem:make-attribute :foreground  "#FFFACD"))
+
 ;; should return a list of attributes for lem for "syntax highlighting" in a buffer
 ;; technically could be used for more than just syntax highlighting
 (defgeneric text-object-lem-overlays (text-obj buf))
+
+(defun begin-in-root (obj)
+  "alternative to `cltpt/base:text-object-begin-in-root' that makes use of :parent-pos property set by `organ-redraw-buffer'."
+  (+ (cltpt/base:text-object-property obj :parent-pos)
+     (cltpt/base:text-object-begin obj)))
+
+(defun end-in-root (obj)
+  "alternative to `cltpt/base:text-object-end-in-root' that makes use of :parent-pos property set by `organ-redraw-buffer'."
+  (+ (cltpt/base:text-object-property obj :parent-pos)
+     (cltpt/base:text-object-end obj)))
 
 ;; this takes an object, finds a cltpt/combinator "submatch", and returns an
 ;; overlay with the given attribute
@@ -48,12 +61,12 @@
 ;; default function for syntax highlighting.
 (defmethod text-object-lem-overlays ((obj cltpt/base:text-object) buf)
   (unless (typep obj 'cltpt/base::document)
-    (let ((begin (cltpt/base:text-object-begin-in-root obj))
-          (end (cltpt/base:text-object-end-in-root obj)))
+    (let ((begin (begin-in-root obj))
+          (end (end-in-root obj)))
       (list
        (lem:make-overlay (organ/utils:char-offset-to-point buf begin)
                          (organ/utils:char-offset-to-point buf end)
-                         (lem:make-attribute :foreground  "#FFFACD"))))))
+                         *default-attribute*)))))
 
 ;; consult cltpt/org-mode:*org-header-rule*
 (defmethod text-object-lem-overlays ((obj cltpt/org-mode:org-header) buf)
@@ -80,3 +93,11 @@
   (list
    (overlay-for-submatch buf obj 'cltpt/org-mode::begin *block-attribute*)
    (overlay-for-submatch buf obj 'cltpt/org-mode::end *block-attribute*)))
+
+(defun organ-redraw-buffer (buf)
+  (lem:clear-overlays buf)
+  (cltpt/base:map-text-object-with-pos-in-root
+   (lem:buffer-value buf 'cltpt-tree)
+   (lambda (obj parent-pos)
+     (setf (cltpt/base:text-object-property obj :parent-pos) parent-pos)
+     (loop for overlay in (text-object-lem-overlays obj buf)))))

@@ -1,23 +1,14 @@
-this is organ-mode
-* hello
 
-* hello
-*** TODO test2
-CLOSED: [2024-02-04 Sun 13:08:22]
-<2024-02-04 Sun 10:00:00>
+test
+\begin{test}
+hey
+what
+\end{test}
 
-this works?
+\[ test code here \]
 
-\(latex here\)
-
-\begin{equation}
-some latex
-\end{equation}
-
-#+begin_src hi
-  print('hey')
+#+begin_src python
+  heyi
 #+end_src
 
 * DONE does this work
-
-something more
