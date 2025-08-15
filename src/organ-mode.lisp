@@ -55,62 +55,70 @@
 (defun current-tree ()
   (buffer-value (current-buffer) 'cltpt-tree))
 
-(defmethod child-closest-before-pos ((text-obj cltpt/base:text-object) pos)
-  "find the leaf-most child that is closest to but before the index POS."
+(defmethod object-closest-before-pos ((text-obj cltpt/base:text-object) pos)
+  "finds the text object ending closest to but before POS."
   (let ((best-candidate))
+    ;; the current object itself is a potential candidate if it ends before the cursor.
+    (when (< (cltpt/base:text-object-end-in-root text-obj) pos)
+      (setf best-candidate text-obj))
+    ;; now check the children for a potentially better (closer) candidate.
     (loop for child in (cltpt/base:text-object-children text-obj)
-          do ;; only consider children that end before the target position
-             (when (< (cltpt/base:region-end
-                       (cltpt/base:text-object-text-region child))
-                      pos)
-               ;; recursively search within this child to find the most
-               ;; deeply nested candidate.
-               (let* ((recursive-candidate (child-closest-before-pos child pos))
-                      ;; the best candidate from this branch is either the deeper one we just found,
-                      ;; or if there isn't one, the child itself.
-                      (current-candidate (or recursive-candidate child)))
-                 ;; compare this branch's candidate with the best one we've found so far.
-                 (if (null best-candidate)
-                     (setf best-candidate current-candidate)
-                     (when (> (cltpt/base:region-end
-                               (cltpt/base:text-object-text-region
-                                current-candidate))
-                              (cltpt/base:region-end
-                               (cltpt/base:text-object-text-region
-                                best-candidate)))
-                       (setf best-candidate current-candidate))))))
+          do
+             ;; if a child starts at or after the cursor position,
+             ;; then no subsequent sibling or descendant can be a valid "before" candidate.
+             ;; we can stop searching entirely.
+             (when (>= (cltpt/base:text-object-begin-in-root child) pos)
+               (return-from object-closest-before-pos best-candidate))
+             ;; recurse into the child to find the best candidate in that subtree.
+             (let ((candidate-from-child (object-closest-before-pos child pos)))
+               ;; if the recursive call found a better candidate (one that ends later), update our best.
+               (when (and candidate-from-child
+                          (> (cltpt/base:text-object-end-in-root
+                              candidate-from-child)
+                             (if best-candidate
+                                 (cltpt/base:text-object-end-in-root best-candidate)
+                                 -1)))
+                 (setf best-candidate candidate-from-child))))
     best-candidate))
 
-(defmethod child-closest-after-pos ((text-obj cltpt/base:text-object) pos)
-  "find the leaf-most child that is closest to but after the index POS."
+(defmethod object-closest-after-pos ((text-obj cltpt/base:text-object) pos)
+  "finds the text object starting closest to but after POS using an efficient."
+  ;; if the entire object ends before our position, it and all its
+  ;; children are irrelevant. We can prune this entire branch.
+  (when (<= (cltpt/base:text-object-end-in-root text-obj) pos)
+    (return-from object-closest-after-pos nil))
   (let ((best-candidate))
+    ;; step 1: The current object itself is a potential candidate.
+    ;; if it starts after the cursor, it's our current best guess.
+    (when (> (cltpt/base:text-object-begin-in-root text-obj) pos)
+      (setf best-candidate text-obj))
+    ;; step 2: now, search the children to see if one of them contains a better candidate.
+    ;; a "better" candidate is one that also starts after `pos` but is closer (has a smaller start position).
     (loop for child in (cltpt/base:text-object-children text-obj)
-          do ;; only consider children that start after the target position
-             (when (> (cltpt/base:region-begin
-                       (cltpt/base:text-object-text-region child))
-                      pos)
-               ;; recursively search within this child to find the most
-               ;; deeply nested candidate.
-               (let* ((recursive-candidate (child-closest-after-pos child pos))
-                      ;; the best candidate from this branch is either the deeper one we just found,
-                      ;; or if there isn't one, the child itself.
-                      (current-candidate (or recursive-candidate child)))
-                 ;; compare this branch's candidate with the best one we've found so far.
-                 (if (null best-candidate)
-                     (setf best-candidate current-candidate)
-                     (when (< (cltpt/base:region-begin
-                               (cltpt/base:text-object-text-region
-                                current-candidate))
-                              (cltpt/base:region-begin
-                               (cltpt/base:text-object-text-region
-                                best-candidate)))
-                       (setf best-candidate current-candidate))))))
+          do
+             ;; if the child starts after our current best candidate,
+             ;; there's no point in searching it or any subsequent siblings, as they will
+             ;; all be further away.
+             (when (and best-candidate
+                        (>= (cltpt/base:text-object-begin-in-root child)
+                            (cltpt/base:text-object-begin-in-root best-candidate)))
+               (return))
+             (let ((candidate-from-child (object-closest-after-pos child pos)))
+               ;; if the recursive call found a valid candidate in the child's branch...
+               (when candidate-from-child
+                 ;; ...and that candidate is better than our current best...
+                 (if (or (null best-candidate)
+                         (< (cltpt/base:text-object-begin-in-root
+                             candidate-from-child)
+                            (cltpt/base:text-object-begin-in-root best-candidate)))
+                     ;; ...then it becomes the new best candidate.
+                     (setf best-candidate candidate-from-child)))))
     best-candidate))
 
 (define-command organ-next-element () ()
   (let* ((tr (current-tree))
          (pos (1- (lem:position-at-point (lem:current-point))))
-         (next (child-closest-after-pos tr pos))
+         (next (object-closest-after-pos tr pos))
          (new-pos (when next (cltpt/base:text-object-begin-in-root next))))
     (when new-pos
       (lem:move-point (lem:current-point)
@@ -121,7 +129,7 @@
 (define-command organ-prev-element () ()
   (let* ((tr (current-tree))
          (pos (1- (lem:position-at-point (lem:current-point))))
-         (prev (child-closest-before-pos tr pos))
+         (prev (object-closest-before-pos tr pos))
          (new-pos (when prev (cltpt/base:text-object-begin-in-root prev))))
     (when new-pos
       (lem:move-point (lem:current-point)
