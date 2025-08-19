@@ -37,7 +37,7 @@
 (defun overlay-for-submatch (buf obj submatch-id attribute)
   "a function DRYing highilighting of submatches."
   (let* ((match (cltpt/base:text-object-property obj :combinator-match))
-         (submatch (car (cltpt/base:find-submatch match submatch-id)))
+         (submatch (car (cltpt/combinator:find-submatch match submatch-id)))
          (submatch-begin (getf submatch :begin))
          (submatch-end (getf submatch :end)))
     (when submatch
@@ -49,7 +49,7 @@
 (defun overlay-for-all-submatches (buf obj submatch-id attribute)
   "a function DRYing highilighting of submatches."
   (let* ((match (cltpt/base:text-object-property obj :combinator-match))
-         (submatches (cltpt/base:find-submatch-all match submatch-id)))
+         (submatches (cltpt/combinator:find-submatch-all match submatch-id)))
     (loop for submatch in submatches
           for submatch-begin = (getf (car submatch) :begin)
           for submatch-end = (getf (car submatch) :end)
