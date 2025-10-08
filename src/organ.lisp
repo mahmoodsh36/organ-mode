@@ -1,6 +1,7 @@
 (defpackage :organ
   (:use :cl :lem :cltpt)
   (:export :*organ-files*))
+
 (in-package :organ)
 
 (defvar *organ-files*
@@ -35,16 +36,19 @@
            (lem/completion-mode:completion-item-label item)))
         items)))))
 
-(define-command open-agenda () ()
+(define-command organ-agenda-open () ()
   "opens the organ-agenda buffer."
   (if *organ-files*
       (progn
-        (lem:message "loading agenda.")
-        (organ/agenda:show-agenda-buffer (cltpt/roam:from-files *organ-files*)))
+        (let* ((rmr (cltpt/roam:from-files *organ-files*))
+               (agenda (cltpt/agenda:from-roamer rmr))
+               (agenda-forest (cltpt/agenda:build-agenda-forest agenda)))
+          (organ/outline-mode:open-outline agenda-forest)
+          (lem:message "loading agenda.")))
       (lem:message "you must customize *organ-files* first.")))
 
 (defun organ-setup-keys ()
-  (define-key *global-keymap* "C-c a" 'open-agenda)
+  (define-key *global-keymap* "C-c a" 'organ-agenda-open)
   (define-key *global-keymap* "C-c r" 'roam-find)
   )
 

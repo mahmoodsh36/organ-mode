@@ -6,6 +6,9 @@
   :components ((:module "utils"
                 :pathname "src/"
                 :components ((:file "utils")))
+               (:module "outline-mode"
+                :pathname "src/"
+                :components ((:file "outline-mode")))
                (:module "agenda"
                 :pathname "src/"
                 :components ((:file "agenda")))
