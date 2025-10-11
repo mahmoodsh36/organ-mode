@@ -3,6 +3,13 @@
   (:export :organ-mode))
 (in-package :organ-mode)
 
+;; incremental parsing doesnt yet work correctly.
+;; while the functionality mostly already exists in 'cltpt', it hasnt been fully
+;; ported to organ, and the buffer is redrawn on every change regardless.
+(defvar *organ-enable-incremental-changes*
+  nil
+  "whether to enable incremental changes in `organ-mode'.")
+
 (defvar *organ-mode-keymap*
   (make-keymap :name '*organ-mode-keymap* :parent *global-keymap*))
 (defvar *organ-mode-navigation-keymap*
@@ -30,7 +37,7 @@
 
 (defun organ-mode-init-all ()
   "called when organ-mode is started, adds modification hooks to reparse buffer."
-  (update-tree nil nil nil)
+  (init-tree)
   (let ((buf (lem:current-buffer)))
     (lem:add-hook
      (lem:variable-value
@@ -38,14 +45,37 @@
       :buffer buf)
      'update-tree)))
 
+(defun init-tree ()
+  (let* ((buf (lem:current-buffer))
+         (buffer-contents (lem:buffer-text buf))
+         (cltpt-tree (cltpt/base:parse cltpt/org-mode:*org-mode* buffer-contents)))
+    (setf (buffer-value buf 'cltpt-tree) cltpt-tree)))
+
 (defun update-tree (start-point end-point length)
   "updates the organ-mode AST of the current buffer."
   (let* ((buf (lem:current-buffer))
          (buffer-contents (lem:buffer-text buf))
-         (cltpt-tree (cltpt/base:parse buffer-contents
-                                       (cltpt/org-mode:org-mode-text-object-types)
-                                       :doc-type 'cltpt/org-mode::org-document)))
-    (setf (buffer-value buf 'cltpt-tree) cltpt-tree)
+         (new-text (lem:points-to-string start-point end-point))
+         (begin-pos (1- (lem:position-at-point start-point)))
+         (end-pos (1- (lem:position-at-point end-point)))
+         (cltpt-tree (buffer-value buf 'cltpt-tree)))
+    (if *organ-enable-incremental-changes*
+        (cltpt/base:handle-change cltpt-tree
+                              cltpt/org-mode:*org-mode*
+                              begin-pos
+                              (lem:buffer-text buf))
+        (setf (buffer-value buf 'cltpt-tree)
+              (cltpt/base:parse cltpt/org-mode:*org-mode* (lem:buffer-text buf))))
+    ;; this is wrong
+    ;; (cltpt/base:handle-changed-regions
+    ;;  cltpt-tree
+    ;;  cltpt/org-mode:*org-mode*
+    ;;  (list (cons
+    ;;         new-text
+    ;;         (cltpt/base:make-region
+    ;;          :begin begin-pos
+    ;;          :end (+ begin-pos change-in-length))))
+    ;;  t)
     (organ-redraw-buffer buf)
     ;; (lem:message "custom syntax highlighting triggered in ~A, size is ~A"
     ;;              (lem:buffer-name buf)

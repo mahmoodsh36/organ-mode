@@ -9,9 +9,6 @@
                (:module "outline-mode"
                 :pathname "src/"
                 :components ((:file "outline-mode")))
-               (:module "agenda"
-                :pathname "src/"
-                :components ((:file "agenda")))
                (:module "organ-mode"
                 :pathname "src/"
                 :depends-on ("utils")
@@ -19,5 +16,5 @@
                              (:file "highlighting")))
                (:module "organ"
                 :pathname "src/"
-                :depends-on ("agenda" "organ-mode")
+                :depends-on ("organ-mode")
                 :components ((:file "organ")))))
