@@ -189,7 +189,7 @@
         (lem:move-to-line (lem:buffer-point buffer) line-num)))))
 
 ;; main function to open an outline with the given forest
-(lem:define-command open-outline (forest)
+(defun open-outline (forest)
   "open an outline buffer with the given forest structure."
   (let ((buffer (lem:make-buffer "*outline*")))
     (lem:change-buffer-mode buffer 'outline-mode)
@@ -254,29 +254,6 @@
     (when prev-line
       (lem:move-to-line point prev-line)
       (lem:move-to-column point 1))))
-
-;; helper function to create a sample outline for testing
-(defun create-sample-outline ()
-  "create a sample outline for testing purposes."
-  (let* ((child1 (create-outline-node "child 1"))
-         (child2 (create-outline-node "child 2"))
-         (subchild1 (create-outline-node "subchild 1"))
-         (subchild2 (create-outline-node "subchild 1.2"))
-         (node1 (create-outline-node "node 1"
-                                     :children (list child1 child2)))
-         (node2 (create-outline-node "node 2"))
-         (node3 (create-outline-node "node 3"
-                                     :children (list subchild1 subchild2))))
-    ;; set up parent relationships
-    (setf (outline-node-parent child1) node1
-          (outline-node-parent child2) node1
-          (outline-node-parent subchild1) node3
-          (outline-node-parent subchild2) node3)
-    (list node1 node2 node3)))
-
-(lem:define-command open-sample-outline () ()
-  "open a sample outline for testing purposes."
-  (open-outline (create-sample-outline)))
 
 ;; command to create an outline with a simple test forest
 (lem:define-command test-outline () ()

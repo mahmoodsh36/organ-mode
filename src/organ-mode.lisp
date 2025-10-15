@@ -145,6 +145,9 @@
                      (setf best-candidate candidate-from-child)))))
     best-candidate))
 
+(defun current-pos ()
+  (1- (lem:position-at-point (lem:current-point))))
+
 (define-command organ-next-element () ()
   (let* ((tr (current-tree))
          (pos (1- (lem:position-at-point (lem:current-point))))
@@ -166,5 +169,62 @@
                       (organ/utils:char-offset-to-point
                        (lem:current-buffer)
                        new-pos)))))
+
+(defun delete-text-between-positions (buffer start-pos end-pos)
+  "delete text between two absolute positions (indices) in the buffer."
+  (when (> start-pos end-pos)
+    (rotatef start-pos end-pos))
+  (let ((start-point (copy-point (buffer-start-point buffer) :temporary))
+        (end-point (copy-point (buffer-start-point buffer) :temporary)))
+    (move-to-position start-point start-pos)
+    (move-to-position end-point end-pos)
+    (delete-between-points start-point end-point)))
+
+(defun replace-text-between-positions (buffer start-pos end-pos replacement-text)
+  "replace text between two absolute positions in the buffer with replacement text."
+  (when (> start-pos end-pos)
+    (rotatef start-pos end-pos))
+  (let ((start-point (copy-point (buffer-start-point buffer) :temporary)))
+    (unless (move-to-position start-point start-pos)
+      (error "start position ~A is out of buffer bounds" start-pos))
+    (let ((end-point (copy-point start-point :temporary)))
+      (unless (move-to-position end-point end-pos)
+        (error "end position ~A is out of buffer bounds" end-pos))
+      (delete-between-points start-point end-point)
+      (insert-string start-point replacement-text))))
+
+(defun format-timestamp (&optional (timestamp (local-time:now)))
+  "return a string like <2024-01-30 Tue> for the given TIMESTAMP."
+  (let* ((base (local-time:format-timestring
+                nil
+                timestamp
+                :format '(:year "-" (:month 2) "-" (:day 2))))
+         (weekday (nth (local-time:timestamp-day-of-week timestamp)
+                       '("Mon" "Tue" "Wed" "Thu" "Fri" "Sat" "Sun"))))
+    (format nil "<~A ~A>" base weekday)))
+
+(define-command edit-timestamp () ()
+  "edit the timestamp at the cursor using `calendar-mode'."
+  (let* ((obj (cltpt/base:child-at-pos (current-tree) (current-pos)))
+         (source-buffer (current-buffer)))
+    ;; (lem:message "DEBUG: ~A" (cltpt/tree/outline:render-tree obj))
+    (if (typep obj 'cltpt/org-mode::org-timestamp)
+        (organ/calendar-mode:calendar-with-callback
+         (lambda (dates)
+           (when dates
+             (let ((new-date (car dates)))
+               (with-current-buffer source-buffer
+                 (replace-text-between-positions
+                  source-buffer
+                  (1+ (cltpt/base:text-object-begin-in-root obj))
+                  (1+ (cltpt/base:text-object-end-in-root obj))
+                  (format-timestamp new-date)))
+               (lem:message "replaced ~A with ~A"
+                            (cltpt/base:text-object-text obj)
+                            new-date))))
+         "*calendar*"
+         nil)
+        (lem:message "object under cursor (~A) isnt a timestamp."
+                     (type-of obj)))))
 
 (define-file-type ("org") organ-mode)
