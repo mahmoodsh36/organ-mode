@@ -49,7 +49,8 @@
   (let* ((buf (lem:current-buffer))
          (buffer-contents (lem:buffer-text buf))
          (cltpt-tree (cltpt/base:parse cltpt/org-mode:*org-mode* buffer-contents)))
-    (setf (buffer-value buf 'cltpt-tree) cltpt-tree)))
+    (setf (buffer-value buf 'cltpt-tree) cltpt-tree)
+    (organ-redraw-buffer buf)))
 
 (defun update-tree (start-point end-point length)
   "updates the organ-mode AST of the current buffer."
