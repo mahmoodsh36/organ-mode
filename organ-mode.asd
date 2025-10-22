@@ -12,6 +12,9 @@
                (:module "calendar-mode"
                 :pathname "src/"
                 :components ((:file "calendar-mode")))
+               (:module "agenda"
+                :pathname "src/"
+                :components ((:file "agenda-mode")))
                (:module "organ-mode"
                 :pathname "src/"
                 :depends-on ("utils" "calendar-mode")

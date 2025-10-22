@@ -1,6 +1,7 @@
 (defpackage :organ/utils
-  (:use :cl :lem)
+  (:use :cl)
   (:export :char-offset-to-point))
+
 (in-package :organ/utils)
 
 (defun char-offset-to-point (buf offset)

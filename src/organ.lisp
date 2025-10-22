@@ -1,5 +1,5 @@
 (defpackage :organ
-  (:use :cl :lem :cltpt)
+  (:use :cl)
   (:export :*organ-files*))
 
 (in-package :organ)
@@ -13,7 +13,7 @@
     (and (<= len (length string))
          (string= prefix (subseq string 0 len)))))
 
-(define-command roam-find () ()
+(lem:define-command roam-find () ()
   (let* ((rmr (cltpt/roam:from-files *organ-files*))
          (items
            (mapcar
@@ -47,7 +47,7 @@
          (dest-file (cltpt/roam:node-file choice)))
     (lem:find-file dest-file)))
 
-(define-command organ-agenda-open () ()
+(lem:define-command organ-agenda-open () ()
   "opens the organ-agenda buffer."
   (if *organ-files*
       (progn
@@ -58,9 +58,18 @@
           (lem:message "loaded agenda.")))
       (lem:message "you must customize *organ-files* first.")))
 
+(lem:define-command agenda-mode-open () ()
+  (if *organ-files*
+      (progn
+        (let* ((rmr (cltpt/roam:from-files *organ-files*))
+               (agenda (cltpt/agenda:from-roamer rmr)))
+          (organ/agenda-mode:agenda-mode-open agenda)
+          (lem:message "loaded agenda.")))
+      (lem:message "you must customize *organ-files* first.")))
+
 (defun organ-setup-keys ()
-  (define-key *global-keymap* "C-c a" 'organ-agenda-open)
-  (define-key *global-keymap* "C-c r" 'roam-find)
+  (lem:define-key lem:*global-keymap* "C-c a" 'agenda-mode-open)
+  (lem:define-key lem:*global-keymap* "C-c r" 'roam-find)
   )
 
 (organ-setup-keys)
