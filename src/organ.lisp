@@ -47,24 +47,12 @@
          (dest-file (cltpt/roam:node-file choice)))
     (lem:find-file dest-file)))
 
-(lem:define-command organ-agenda-open () ()
-  "opens the organ-agenda buffer."
-  (if *organ-files*
-      (progn
-        (let* ((rmr (cltpt/roam:from-files *organ-files*))
-               (agenda (cltpt/agenda:from-roamer rmr))
-               (agenda-forest (cltpt/agenda:build-agenda-forest agenda)))
-          (organ/outline-mode:open-outline agenda-forest)
-          (lem:message "loaded agenda.")))
-      (lem:message "you must customize *organ-files* first.")))
-
 (lem:define-command agenda-mode-open () ()
   (if *organ-files*
-      (progn
-        (let* ((rmr (cltpt/roam:from-files *organ-files*))
-               (agenda (cltpt/agenda:from-roamer rmr)))
-          (organ/agenda-mode:agenda-mode-open agenda)
-          (lem:message "loaded agenda.")))
+      (let* ((rmr (cltpt/roam:from-files *organ-files*))
+             (agenda (cltpt/agenda:from-roamer rmr)))
+        (organ/agenda-mode:agenda-mode-open agenda)
+        (lem:message "loaded agenda."))
       (lem:message "you must customize *organ-files* first.")))
 
 (defun organ-setup-keys ()
