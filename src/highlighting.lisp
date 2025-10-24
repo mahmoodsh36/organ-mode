@@ -1,4 +1,4 @@
-(in-package :organ-mode)
+(in-package :organ/organ-mode)
 
 (defvar *header-stars-attribute*
   (lem:make-attribute :foreground  "#FFFACD"))

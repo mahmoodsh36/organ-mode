@@ -8,6 +8,13 @@
   nil
   "a list of rules according to which to look for and parse files. see `cltpt/roam:find-files'.")
 
+(defun organ-setup-keys ()
+  (lem:define-key lem:*global-keymap* "C-c a" 'agenda-mode-open)
+  (lem:define-key lem:*global-keymap* "C-c r" 'roam-find)
+  )
+
+(organ-setup-keys)
+
 (defun string-starts-with-p (prefix string)
   (let ((len (length prefix)))
     (and (<= len (length string))
@@ -54,10 +61,3 @@
         (organ/agenda-mode:agenda-mode-open agenda)
         (lem:message "loaded agenda."))
       (lem:message "you must customize *organ-files* first.")))
-
-(defun organ-setup-keys ()
-  (lem:define-key lem:*global-keymap* "C-c a" 'agenda-mode-open)
-  (lem:define-key lem:*global-keymap* "C-c r" 'roam-find)
-  )
-
-(organ-setup-keys)

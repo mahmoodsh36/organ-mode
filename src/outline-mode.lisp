@@ -55,17 +55,21 @@
 
 ;; data structure to represent a node in the outline
 (defclass outline-node ()
-  ((value :initarg :value
-          :accessor outline-node-value)
-   (children :initarg :children
-             :initform nil
-             :accessor outline-node-children)
-   (expanded :initarg :expanded
-             :initform nil
-             :accessor outline-node-expanded-p)
-   (parent :initarg :parent
-           :initform nil
-           :accessor outline-node-parent)))
+  ((value
+    :initarg :value
+    :accessor outline-node-value)
+   (children
+    :initarg :children
+    :initform nil
+    :accessor outline-node-children)
+   (expanded
+    :initarg :expanded
+    :initform nil
+    :accessor outline-node-expanded-p)
+   (parent
+    :initarg :parent
+    :initform nil
+    :accessor outline-node-parent)))
 
 (defun create-outline-node (value &key children (expanded nil) parent)
   "create an outline node with the given parameters."

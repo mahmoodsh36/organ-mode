@@ -1,7 +1,8 @@
-(defpackage :organ-mode
-  (:use :cl :lem :lem/language-mode :lem/language-mode-tools :cltpt)
-  (:export :organ-mode))
-(in-package :organ-mode)
+(defpackage :organ/organ-mode
+  (:use :cl)
+  (:export :organ-mode :current-tree))
+
+(in-package :organ/organ-mode)
 
 ;; incremental parsing doesnt yet work correctly.
 ;; while the functionality mostly already exists in 'cltpt', it hasnt been fully
@@ -11,29 +12,24 @@
   "whether to enable incremental changes in `organ-mode'.")
 
 (defvar *organ-mode-keymap*
-  (make-keymap :name '*organ-mode-keymap* :parent *global-keymap*))
+  (lem:make-keymap :name '*organ-mode-keymap* :parent lem:*global-keymap*))
 (defvar *organ-mode-navigation-keymap*
-  (make-keymap :name '*organ-mode-keymap* :parent *global-keymap*))
+  (lem:make-keymap :name '*organ-mode-keymap* :parent lem:*global-keymap*))
 
-(define-key *organ-mode-keymap* "C-l" *organ-mode-navigation-keymap*)
-(define-keys *organ-mode-navigation-keymap*
+(lem:define-key *organ-mode-keymap* "C-l" *organ-mode-navigation-keymap*)
+(lem:define-keys *organ-mode-navigation-keymap*
   ("n" 'organ-next-element)
   ("p" 'organ-prev-element)
   )
 
-(defvar *organ-syntax-table*
-  (let ((table (make-syntax-table)))
-    table))
-
 (defvar *organ-mode-hook*
   '((organ-mode-init-all . 0)))
 
-(define-major-mode organ-mode language-mode
+(lem:define-major-mode organ-mode nil
   (:name "organ-mode"
    :keymap *organ-mode-keymap*
-   :syntax-table *organ-syntax-table*
    :mode-hook *organ-mode-hook*)
-  (setf (variable-value 'enable-syntax-highlight) t))
+  (setf (lem:variable-value 'lem:enable-syntax-highlight) t))
 
 (defun organ-mode-init-all ()
   "called when organ-mode is started, adds modification hooks to reparse buffer."
@@ -49,7 +45,7 @@
   (let* ((buf (lem:current-buffer))
          (buffer-contents (lem:buffer-text buf))
          (cltpt-tree (cltpt/base:parse cltpt/org-mode:*org-mode* buffer-contents)))
-    (setf (buffer-value buf 'cltpt-tree) cltpt-tree)
+    (setf (lem:buffer-value buf 'cltpt-tree) cltpt-tree)
     (organ-redraw-buffer buf)))
 
 (defun update-tree (start-point end-point length)
@@ -59,13 +55,13 @@
          (new-text (lem:points-to-string start-point end-point))
          (begin-pos (1- (lem:position-at-point start-point)))
          (end-pos (1- (lem:position-at-point end-point)))
-         (cltpt-tree (buffer-value buf 'cltpt-tree)))
+         (cltpt-tree (lem:buffer-value buf 'cltpt-tree)))
     (if *organ-enable-incremental-changes*
         (cltpt/base:handle-change cltpt-tree
                               cltpt/org-mode:*org-mode*
                               begin-pos
                               (lem:buffer-text buf))
-        (setf (buffer-value buf 'cltpt-tree)
+        (setf (lem:buffer-value buf 'cltpt-tree)
               (cltpt/base:parse cltpt/org-mode:*org-mode* (lem:buffer-text buf))))
     ;; this is wrong
     ;; (cltpt/base:handle-changed-regions
@@ -84,7 +80,7 @@
     ))
 
 (defun current-tree ()
-  (buffer-value (current-buffer) 'cltpt-tree))
+  (lem:buffer-value (lem:current-buffer) 'cltpt-tree))
 
 (defmethod object-closest-before-pos ((text-obj cltpt/base:text-object) pos)
   "finds the text object ending closest to but before POS."
@@ -146,10 +142,7 @@
                      (setf best-candidate candidate-from-child)))))
     best-candidate))
 
-(defun current-pos ()
-  (1- (lem:position-at-point (lem:current-point))))
-
-(define-command organ-next-element () ()
+(lem:define-command organ-next-element () ()
   (let* ((tr (current-tree))
          (pos (1- (lem:position-at-point (lem:current-point))))
          (next (object-closest-after-pos tr pos))
@@ -160,7 +153,7 @@
                        (lem:current-buffer)
                        new-pos)))))
 
-(define-command organ-prev-element () ()
+(lem:define-command organ-prev-element () ()
   (let* ((tr (current-tree))
          (pos (1- (lem:position-at-point (lem:current-point))))
          (prev (object-closest-before-pos tr pos))
@@ -171,55 +164,22 @@
                        (lem:current-buffer)
                        new-pos)))))
 
-(defun delete-text-between-positions (buffer start-pos end-pos)
-  "delete text between two absolute positions (indices) in the buffer."
-  (when (> start-pos end-pos)
-    (rotatef start-pos end-pos))
-  (let ((start-point (copy-point (buffer-start-point buffer) :temporary))
-        (end-point (copy-point (buffer-start-point buffer) :temporary)))
-    (move-to-position start-point start-pos)
-    (move-to-position end-point end-pos)
-    (delete-between-points start-point end-point)))
-
-(defun replace-text-between-positions (buffer start-pos end-pos replacement-text)
-  "replace text between two absolute positions in the buffer with replacement text."
-  (when (> start-pos end-pos)
-    (rotatef start-pos end-pos))
-  (let ((start-point (copy-point (buffer-start-point buffer) :temporary)))
-    (unless (move-to-position start-point start-pos)
-      (error "start position ~A is out of buffer bounds" start-pos))
-    (let ((end-point (copy-point start-point :temporary)))
-      (unless (move-to-position end-point end-pos)
-        (error "end position ~A is out of buffer bounds" end-pos))
-      (delete-between-points start-point end-point)
-      (insert-string start-point replacement-text))))
-
-(defun format-timestamp (&optional (timestamp (local-time:now)))
-  "return a string like <2024-01-30 Tue> for the given TIMESTAMP."
-  (let* ((base (local-time:format-timestring
-                nil
-                timestamp
-                :format '(:year "-" (:month 2) "-" (:day 2))))
-         (weekday (nth (local-time:timestamp-day-of-week timestamp)
-                       '("Mon" "Tue" "Wed" "Thu" "Fri" "Sat" "Sun"))))
-    (format nil "<~A ~A>" base weekday)))
-
-(define-command edit-timestamp () ()
+(lem:define-command edit-timestamp () ()
   "edit the timestamp at the cursor using `calendar-mode'."
   (let* ((obj (cltpt/base:child-at-pos (current-tree) (current-pos)))
-         (source-buffer (current-buffer)))
+         (source-buffer (lem:current-buffer)))
     ;; (lem:message "DEBUG: ~A" (cltpt/tree/outline:render-tree obj))
     (if (typep obj 'cltpt/org-mode::org-timestamp)
         (organ/calendar-mode:calendar-with-callback
          (lambda (dates)
            (when dates
              (let ((new-date (car dates)))
-               (with-current-buffer source-buffer
-                 (replace-text-between-positions
+               (lem:with-current-buffer source-buffer
+                 (organ/utils:replace-text-between-positions
                   source-buffer
                   (1+ (cltpt/base:text-object-begin-in-root obj))
                   (1+ (cltpt/base:text-object-end-in-root obj))
-                  (format-timestamp new-date)))
+                  (organ/utils:format-timestamp new-date)))
                (lem:message "replaced ~A with ~A"
                             (cltpt/base:text-object-text obj)
                             new-date))))
@@ -228,4 +188,4 @@
         (lem:message "object under cursor (~A) isnt a timestamp."
                      (type-of obj)))))
 
-(define-file-type ("org") organ-mode)
+(lem:define-file-type ("org") organ-mode)
