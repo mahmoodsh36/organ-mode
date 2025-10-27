@@ -189,28 +189,28 @@
 ;;         (lem:message "object under cursor (~A) isnt a timestamp."
 ;;                      (type-of obj)))))
 
-(lem:define-command edit-timestamp () ()
+(lem:define-command organ-insert-timestamp () ()
   "edit the timestamp at the cursor using `calendar-mode'."
-  (let* ((obj (cltpt/base:child-at-pos (current-tree) (current-pos)))
+  (let* ((obj (cltpt/base:child-at-pos (current-tree)
+                                       (organ/utils:current-pos)))
+         (pt (lem:buffer-point (lem:current-buffer)))
          (source-buffer (lem:current-buffer)))
-    ;; (lem:message "DEBUG: ~A" (cltpt/tree/outline:render-tree obj))
-    (if (typep obj 'cltpt/org-mode::org-timestamp)
-        (organ/calendar-mode:popup-calendar-with-callback
-         (lambda (dates)
-           (when dates
-             (let ((new-date (car dates)))
-               (lem:with-current-buffer source-buffer
+    (organ/popup-calendar:popup-calendar-with-callback
+     (lambda (new-date)
+       (when new-date
+         (lem:with-current-buffer source-buffer
+           (if (typep obj 'cltpt/org-mode::org-timestamp)
+               (progn
                  (organ/utils:replace-text-between-positions
                   source-buffer
                   (1+ (cltpt/base:text-object-begin-in-root obj))
                   (1+ (cltpt/base:text-object-end-in-root obj))
-                  (organ/utils:format-timestamp new-date)))
-               (lem:message "replaced ~A with ~A"
-                            (cltpt/base:text-object-text obj)
-                            new-date))))
-         "*calendar*"
-         nil)
-        (lem:message "object under cursor (~A) isnt a timestamp."
-                     (type-of obj)))))
+                  (organ/utils:format-timestamp new-date))
+                 (lem:message "replaced ~A with ~A"
+                              (cltpt/base:text-object-text obj)
+                              new-date))
+               (lem:insert-string
+                pt
+                (organ/utils:format-timestamp new-date)))))))))
 
 (lem:define-file-type ("org") organ-mode)
