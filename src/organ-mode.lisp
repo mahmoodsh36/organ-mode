@@ -164,13 +164,38 @@
                        (lem:current-buffer)
                        new-pos)))))
 
+;; this used calendar-mode.lisp directly instead of the popup
+;; (lem:define-command edit-timestamp () ()
+;;   "edit the timestamp at the cursor using `calendar-mode'."
+;;   (let* ((obj (cltpt/base:child-at-pos (current-tree) (current-pos)))
+;;          (source-buffer (lem:current-buffer)))
+;;     ;; (lem:message "DEBUG: ~A" (cltpt/tree/outline:render-tree obj))
+;;     (if (typep obj 'cltpt/org-mode::org-timestamp)
+;;         (organ/calendar-mode:calendar-with-callback
+;;          (lambda (dates)
+;;            (when dates
+;;              (let ((new-date (car dates)))
+;;                (lem:with-current-buffer source-buffer
+;;                  (organ/utils:replace-text-between-positions
+;;                   source-buffer
+;;                   (1+ (cltpt/base:text-object-begin-in-root obj))
+;;                   (1+ (cltpt/base:text-object-end-in-root obj))
+;;                   (organ/utils:format-timestamp new-date)))
+;;                (lem:message "replaced ~A with ~A"
+;;                             (cltpt/base:text-object-text obj)
+;;                             new-date))))
+;;          "*calendar*"
+;;          nil)
+;;         (lem:message "object under cursor (~A) isnt a timestamp."
+;;                      (type-of obj)))))
+
 (lem:define-command edit-timestamp () ()
   "edit the timestamp at the cursor using `calendar-mode'."
   (let* ((obj (cltpt/base:child-at-pos (current-tree) (current-pos)))
          (source-buffer (lem:current-buffer)))
     ;; (lem:message "DEBUG: ~A" (cltpt/tree/outline:render-tree obj))
     (if (typep obj 'cltpt/org-mode::org-timestamp)
-        (organ/calendar-mode:calendar-with-callback
+        (organ/calendar-mode:popup-calendar-with-callback
          (lambda (dates)
            (when dates
              (let ((new-date (car dates)))

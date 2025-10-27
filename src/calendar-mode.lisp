@@ -1,7 +1,17 @@
 (defpackage :organ/calendar-mode
   (:use :cl :lem)
-  (:export :calendar
-           :calendar-with-callback))
+  (:export
+   :calendar
+   :calendar-with-callback
+   :update-calendar-display
+   :move-to-date
+   :refresh-calendar-highlights
+   :calendar-cleanup
+   :*calendar-grid-width*
+   :*calendar-grid-height*
+   :*calendar-marked-dates*
+   :*calendar-date*
+   :popup-calendar-with-callback))
 
 (in-package :organ/calendar-mode)
 
@@ -83,7 +93,10 @@
 
 (defun get-month-index-in-grid (month
                                 year
-&optional (calendar-date (variable-value '*calendar-date* :buffer (current-buffer))))
+                                &optional (calendar-date
+                                           (variable-value
+                                            '*calendar-date*
+                                            :buffer (current-buffer))))
   "get the index of a month/year in the current grid display"
   (let* ((buffer (current-buffer))
          (start-month (local-time:timestamp-month calendar-date))
@@ -92,13 +105,14 @@
                         (variable-value '*calendar-grid-height* :buffer buffer))))
     (loop for i from 0 below num-months
           for ts = (local-time:timestamp+
-                    (local-time:encode-timestamp 0
-                                                 0
-                                                 0
-                                                 0
-                                                 1
-                                                 start-month
-                                                 start-year)
+                    (local-time:encode-timestamp
+                     0
+                     0
+                     0
+                     0
+                     1
+                     start-month
+                     start-year)
                     i :month)
           when (and (= (local-time:timestamp-month ts) month)
                     (= (local-time:timestamp-year ts) year))
@@ -108,8 +122,12 @@
   "get the (row, column) position for a month index in the grid."
   (when index
     (let ((buffer (current-buffer)))
-      (values (floor index (variable-value '*calendar-grid-width* :buffer buffer)) ;; row
-              (mod index (variable-value '*calendar-grid-width* :buffer buffer)))))) ;; column
+      (values (floor index
+                     (variable-value '*calendar-grid-width*
+                                     :buffer buffer)) ;; row
+              (mod index
+                   (variable-value '*calendar-grid-width*
+                                   :buffer buffer)))))) ;; column
 
 (defun get-date-grid-position (date-ts)
   "get the (row, column) position of a date in the current grid."
@@ -144,7 +162,8 @@
   (when target-month-ts
     (let* ((target-month (local-time:timestamp-month target-month-ts))
            (target-year (local-time:timestamp-year target-month-ts))
-           (first-day-of-target-month (local-time:encode-timestamp 0 0 0 0 1 target-month target-year))
+           (first-day-of-target-month
+             (local-time:encode-timestamp 0 0 0 0 1 target-month target-year))
            (first-day-weekday
              (normalize-day-of-week
               (local-time:timestamp-day-of-week first-day-of-target-month)))
@@ -152,14 +171,19 @@
                           weekday-index
                           (- first-day-weekday)
                           1)))
-      (loop while (<= target-day 0) do (incf target-day 7))
+      (loop while (<= target-day 0)
+            do (incf target-day 7))
       (loop while (> target-day
                      (local-time:days-in-month target-month target-year))
             do (decf target-day 7))
       (when (and (> target-day 0)
                  (<= target-day
                      (local-time:days-in-month target-month target-year)))
-        (local-time:encode-timestamp 0 0 0 0 target-day target-month target-year)))))
+        (local-time:encode-timestamp
+         0 0 0 0
+         target-day
+         target-month
+         target-year)))))
 
 (defun find-date-in-line (line-point target-col)
   "find the date in the given line that is closest to the target column."
@@ -177,9 +201,11 @@
                      (when (< distance best-distance)
                        (setf best-distance distance)
                        (setf best-point (copy-point search-point :temporary))))))
-        (when (and best-point (variable-value '*calendar-mode-debug* :buffer buffer))
+        (when (and best-point (variable-value '*calendar-mode-debug*
+                                              :buffer buffer))
           (message "DEBUG: selected date at col ~a (best distance ~a)"
-                   (point-column best-point) best-distance))
+                   (point-column best-point)
+                   best-distance))
         best-point))))
 
 (defun find-cross-month-target (current-point direction)
@@ -248,7 +274,9 @@
          (line-step (if (eq direction :up) -1 1)))
     (when (variable-value '*calendar-mode-debug* :buffer buffer)
       (message "DEBUG: try-intra-month-navigation: direction=~a, strict-mode=~a"
-               direction (variable-value '*calendar-strict-grid-navigation* :buffer buffer)))
+               direction
+               (variable-value '*calendar-strict-grid-navigation*
+                               :buffer buffer)))
     (with-point ((p (current-point)))
       (loop
         (unless (line-offset p line-step)
@@ -258,7 +286,9 @@
         (let ((line-content (line-string p))
               (line-len (length (line-string p))))
           (when (variable-value '*calendar-mode-debug* :buffer buffer)
-            (message "DEBUG: intra-month nav checking line='~a', len=~a" line-content line-len))
+            (message "DEBUG: intra-month nav checking line='~a', len=~a"
+                     line-content
+                     line-len))
           (cond
             ((and (> line-len 0) (looking-at p "^\\s *[0-9]+"))
              (let ((target-pos (min current-col (1- line-len))))
@@ -266,7 +296,8 @@
                (let ((has-date-at-col (text-property-at p :calendar-day)))
                  (when (variable-value '*calendar-mode-debug* :buffer buffer)
                    (message "DEBUG: intra-month nav: target-pos=~a, has-date-at-col=~a"
-                            target-pos has-date-at-col))
+                            target-pos
+                            has-date-at-col))
                  (if has-date-at-col
                      (progn
                        (when (variable-value '*calendar-mode-debug* :buffer buffer)
@@ -274,23 +305,28 @@
                        (move-point (current-point) p)
                        (highlight-current-day)
                        (return-from try-intra-month-navigation t))
-                     (if (variable-value '*calendar-strict-grid-navigation* :buffer buffer)
+                     (if (variable-value '*calendar-strict-grid-navigation*
+                                         :buffer buffer)
                          (progn
-                           (when (variable-value '*calendar-mode-debug* :buffer buffer)
+                           (when (variable-value '*calendar-mode-debug*
+                                                 :buffer buffer)
                              (message "DEBUG: strict mode: no date at target column, going to cross-month"))
                            (return-from try-intra-month-navigation nil))
                          (let ((found-point (find-date-near-column p current-col)))
                            (if found-point
                                (progn
-                                 (when (variable-value '*calendar-mode-debug* :buffer buffer)
+                                 (when (variable-value '*calendar-mode-debug*
+                                                       :buffer buffer)
                                    (message "DEBUG: found nearby date"))
                                  (move-point (current-point) found-point)
                                  (highlight-current-day)
                                  (return-from try-intra-month-navigation t))
                                (progn
-                                 (when (variable-value '*calendar-mode-debug* :buffer buffer)
+                                 (when (variable-value '*calendar-mode-debug*
+                                                       :buffer buffer)
                                    (message "DEBUG: no nearby date found"))
-                                 (return-from try-intra-month-navigation nil)))))))))
+                                 (return-from try-intra-month-navigation
+                                   nil)))))))))
             (t
              (when (variable-value '*calendar-mode-debug* :buffer buffer)
                (message "DEBUG: intra-month nav: empty line or header, continuing search"))
@@ -325,8 +361,10 @@
             (local-time:encode-timestamp
              0 0 0 0
              day
-             (local-time:timestamp-month (variable-value '*calendar-date* :buffer buffer))
-             (local-time:timestamp-year (variable-value '*calendar-date* :buffer buffer))))))))
+             (local-time:timestamp-month
+              (variable-value '*calendar-date* :buffer buffer))
+             (local-time:timestamp-year
+              (variable-value '*calendar-date* :buffer buffer))))))))
 
 (defun calendar-current-day-overlay (buffer)
   "get the current day overlay for the buffer"
@@ -391,7 +429,7 @@ if nil, navigation finds nearest date in same month first.")
   (let ((buffer (current-buffer)))
     (dolist (overlay (calendar-marked-dates-overlays buffer))
       (delete-overlay overlay))
-    (setf (calendar-marked-dates-overlays buffer) '())))
+    (setf (calendar-marked-dates-overlays buffer) nil)))
 
 (defun clear-today-overlay ()
   "clear the today date overlay."
@@ -406,7 +444,12 @@ if nil, navigation finds nearest date in same month first.")
        (= (local-time:timestamp-month date1) (local-time:timestamp-month date2))
        (= (local-time:timestamp-day date1) (local-time:timestamp-day date2))))
 
-(defun format-calendar-date (date &optional (format '((:year 4) "-" (:month 2) "-" (:day 2))))
+(defun format-calendar-date (date
+                             &optional (format '((:year 4)
+                                                 "-"
+                                                 (:month 2)
+                                                 "-"
+                                                 (:day 2))))
   (local-time:format-timestring nil date :format format))
 
 (defun highlight-marked-dates ()
@@ -461,11 +504,14 @@ if nil, navigation finds nearest date in same month first.")
           (progn
             (setf (variable-value '*calendar-marked-dates* :buffer buffer)
                   (remove current-date
-                          (variable-value '*calendar-marked-dates* :buffer buffer)
+                          (variable-value '*calendar-marked-dates*
+                                          :buffer buffer)
                           :test #'same-date-p))
             (message "unmarked date: ~A" (format-calendar-date current-date)))
           (progn
-            (push current-date (variable-value '*calendar-marked-dates* :buffer buffer))
+            (push current-date
+                  (variable-value '*calendar-marked-dates*
+                                  :buffer buffer))
             (message "marked date: ~A" (format-calendar-date current-date))))
       (refresh-calendar-highlights))))
 
@@ -488,7 +534,7 @@ if nil, navigation finds nearest date in same month first.")
     (setf (calendar-current-day-overlay buffer) nil))
   (dolist (overlay (calendar-marked-dates-overlays buffer))
     (delete-overlay overlay))
-  (setf (calendar-marked-dates-overlays buffer) '())
+  (setf (calendar-marked-dates-overlays buffer) nil)
   (when (calendar-today-overlay buffer)
     (delete-overlay (calendar-today-overlay buffer))
     (setf (calendar-today-overlay buffer) nil))
@@ -503,11 +549,16 @@ if nil, navigation finds nearest date in same month first.")
          (start-month (local-time:timestamp-month calendar-date))
          (start-year (local-time:timestamp-year calendar-date))
          (num-months (* (variable-value '*calendar-grid-width* :buffer buffer)
-                        (variable-value '*calendar-grid-height* :buffer buffer)))
+                        (variable-value '*calendar-grid-height*
+                                        :buffer buffer)))
          (visible-months))
     (loop for i from 0 below num-months
           for ts = (local-time:timestamp+
-                    (local-time:encode-timestamp 0 0 0 0 1 start-month start-year)
+                    (local-time:encode-timestamp
+                     0 0 0 0
+                     1
+                     start-month
+                     start-year)
                     i :month)
           do (push (cons (local-time:timestamp-month ts)
                          (local-time:timestamp-year ts))
@@ -528,32 +579,41 @@ SCROLL-STYLE can be :jump (the default) or :scroll.
                             (variable-value '*calendar-date* :buffer buffer)
                             (symbol-value calendar-date-var))))
     (when (variable-value '*calendar-mode-debug* :buffer buffer)
-      (message "DEBUG move-to-date: called for ~a with style ~a" target-date scroll-style))
+      (message "DEBUG move-to-date: called for ~a with style ~a"
+               target-date
+               scroll-style))
     (let ((target-day (local-time:timestamp-day target-date))
           (target-month (local-time:timestamp-month target-date))
           (target-year (local-time:timestamp-year target-date)))
       (unless (month-visible-in-grid target-month target-year calendar-date)
         (when (variable-value '*calendar-mode-debug* :buffer buffer)
-          (message "DEBUG move-to-date: target month not visible. Recalculating view."))
+          (message "DEBUG move-to-date: target month not visible. recalculating view."))
         (cond
-((eq scroll-style :scroll)
-            (when (variable-value '*calendar-mode-debug* :buffer buffer)
-              (message "DEBUG move-to-date: scrolling one month."))
-            (if (local-time:timestamp< target-date calendar-date)
-                (setf (variable-value calendar-date-var :buffer buffer)
-                      (local-time:timestamp- calendar-date 1 :month))
-                (setf (variable-value calendar-date-var :buffer buffer)
-                      (local-time:timestamp+ calendar-date 1 :month))))
+          ((eq scroll-style :scroll)
+           (when (variable-value '*calendar-mode-debug* :buffer buffer)
+             (message "DEBUG move-to-date: scrolling one month."))
+           (if (local-time:timestamp< target-date calendar-date)
+               (setf (variable-value calendar-date-var :buffer buffer)
+                     (local-time:timestamp- calendar-date 1 :month))
+               (setf (variable-value calendar-date-var :buffer buffer)
+                     (local-time:timestamp+ calendar-date 1 :month))))
           (t ;; :jump style (the default)
            (when (variable-value '*calendar-mode-debug* :buffer buffer)
              (message "DEBUG move-to-date: jumping to new grid start."))
            (setf (variable-value calendar-date-var :buffer buffer)
-                 (local-time:encode-timestamp 0 0 0 0 1 target-month target-year))))
+                 (local-time:encode-timestamp
+                  0 0 0 0
+                  1
+                  target-month
+                  target-year))))
         (update-calendar-display buffer)
         (when (variable-value '*calendar-mode-debug* :buffer buffer)
           (message "DEBUG move-to-date: redraw complete.")))
       (when (variable-value '*calendar-mode-debug* :buffer buffer)
-        (message "DEBUG move-to-date: calling move-to-calendar-day for ~a/~a/~a" target-day target-month target-year))
+        (message "DEBUG move-to-date: calling move-to-calendar-day for ~a/~a/~a"
+                 target-day
+                 target-month
+                 target-year))
       (move-to-calendar-day target-day target-month target-year)
       (when (variable-value '*calendar-mode-debug* :buffer buffer)
         (message "DEBUG move-to-date: returned from move-to-calendar-day. highlighting."))
@@ -562,7 +622,10 @@ SCROLL-STYLE can be :jump (the default) or :scroll.
 (defun find-day-position (buffer day target-month target-year)
   "find the position of a specific day in the buffer for the specific month/year."
   (when (variable-value '*calendar-mode-debug* :buffer buffer)
-    (message "DEBUG find-day-position: searching for ~a/~a/~a" day target-month target-year))
+    (message "DEBUG find-day-position: searching for ~a/~a/~a"
+             day
+             target-month
+             target-year))
   (with-point ((point (buffer-point buffer)))
     (buffer-start point)
     (loop
@@ -588,12 +651,13 @@ SCROLL-STYLE can be :jump (the default) or :scroll.
       (if day-pos
           (progn
             (when (variable-value '*calendar-mode-debug* :buffer buffer)
-              (message "DEBUG move-to-calendar-day: Found position. Moving point."))
+              (message "DEBUG move-to-calendar-day: found position. moving point."))
             (move-point (current-point) day-pos))
           (when (variable-value '*calendar-mode-debug* :buffer buffer)
-            (message "DEBUG move-to-calendar-day: Position was NIL. Did not move point."))))))
+            (message "DEBUG move-to-calendar-day: Position was NIL. did not move point."))))))
 
-(defun update-calendar-display (buffer &optional (calendar-date-var '*calendar-date*))
+(defun update-calendar-display (buffer
+                                &optional (calendar-date-var '*calendar-date*))
   (let* ((calendar-date (if (eq calendar-date-var '*calendar-date*)
                             (variable-value '*calendar-date* :buffer buffer)
                             (symbol-value calendar-date-var)))
@@ -673,23 +737,23 @@ INITIAL-DATE can be a timestamp or nil for today."
     (let ((buffer (make-buffer buffer-name)))
       (switch-to-buffer buffer)
       (calendar-mode)
-      ;; Initialize buffer-local state
+      ;; initialize buffer-local state
       (setf (calendar-current-day-overlay buffer) nil)
-      (setf (calendar-marked-dates-overlays buffer) '())
+      (setf (calendar-marked-dates-overlays buffer) nil)
       (setf (calendar-today-overlay buffer) nil)
       (setf (variable-value '*calendar-grid-width* :buffer buffer) 3)
       (setf (variable-value '*calendar-grid-height* :buffer buffer) 3)
       (setf (variable-value '*calendar-commands-history* :buffer buffer) nil)
       (setf (variable-value '*calendar-mode-debug* :buffer buffer) nil)
       (setf (variable-value '*calendar-strict-grid-navigation* :buffer buffer) t)
-      ;; Add cleanup hook
+      ;; add cleanup hook
       (add-hook (variable-value 'kill-buffer-hook :buffer buffer)
                 #'calendar-cleanup)
-      ;; Set calendar state
+      ;; set calendar state
       (setf (variable-value '*calendar-date* :buffer buffer) (or initial-date (local-time:now)))
       (setf (variable-value '*source-buffer* :buffer buffer) source-buffer)
       (setf (variable-value '*calendar-callback* :buffer buffer) callback)
-(setf (variable-value '*calendar-marked-dates* :buffer buffer) nil)
+      (setf (variable-value '*calendar-marked-dates* :buffer buffer) nil)
       (clear-marked-dates-overlays)
       (clear-today-overlay)
       (update-calendar-display buffer)
@@ -754,10 +818,12 @@ INITIAL-DATE should be a local-time timestamp."
                                (variable-value '*calendar-date* :buffer buffer))
         (move-to-date target-date)
         ;; Fallback: move to first day of the first visible month
-        (let ((first-visible-date (variable-value '*calendar-date* :buffer buffer)))
-          (move-to-calendar-day 1
-                                (local-time:timestamp-month first-visible-date)
-                                (local-time:timestamp-year first-visible-date))))))
+        (let ((first-visible-date (variable-value '*calendar-date*
+                                                  :buffer buffer)))
+          (move-to-calendar-day
+           1
+           (local-time:timestamp-month first-visible-date)
+           (local-time:timestamp-year first-visible-date))))))
 
 (defun navigate-calendar (offset unit)
   "navigate calendar by OFFSET units of UNIT (month or year)"
@@ -810,8 +876,8 @@ INITIAL-DATE should be a local-time timestamp."
                 (prompt-for-string
                  "year: "
                  :initial-value (write-to-string
-                                   (local-time:timestamp-year
-                                    (local-time:now))))))
+                                 (local-time:timestamp-year
+                                  (local-time:now))))))
          (new-date (local-time:encode-timestamp 0 0 0 0 day month year)))
     (setf (variable-value '*calendar-date* :buffer buffer) new-date)
     (update-calendar-display buffer)
@@ -875,8 +941,8 @@ DIRECTION can be :left or :right."
          (line-fn (if (eq direction :right) #'line-end #'line-start))
          (boundary-fn (if (eq direction :right) #'point< #'point>))
          (buffer-boundary (if (eq direction :right)
-                             (buffer-end-point buffer)
-                             (buffer-start-point buffer))))
+                              (buffer-end-point buffer)
+                              (buffer-start-point buffer))))
     ;; first, try to find the next/previous date on the current line
     (with-point ((p (copy-point (current-point) :temporary))
                  (boundary-point (copy-point (current-point) :temporary)))
