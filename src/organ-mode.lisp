@@ -190,7 +190,7 @@
 ;;                      (type-of obj)))))
 
 (lem:define-command organ-insert-timestamp () ()
-  "edit the timestamp at the cursor using `calendar-mode'."
+  "if there is a timestamp at the cursor, edit it using `popup-calendar', otherwise insert new timestamp."
   (let* ((obj (cltpt/base:child-at-pos (current-tree)
                                        (organ/utils:current-pos)))
          (pt (lem:buffer-point (lem:current-buffer)))
@@ -212,5 +212,25 @@
                (lem:insert-string
                 pt
                 (organ/utils:format-timestamp new-date)))))))))
+
+;; this currently only works for links that 'resolve' to filepaths
+(lem:define-command organ-open-at-point () ()
+  "open the link at point."
+  (let* ((obj (cltpt/base:child-at-pos (current-tree)
+                                       (organ/utils:current-pos)))
+         (resolved (cltpt/base:text-link-resolve obj))
+         (link (cltpt/base:text-link-link obj))
+         (dest (cltpt/base:link-dest link))
+         (source-buffer (lem:current-buffer))
+         (cltpt/base:text-link-link obj))
+    (when (typep obj 'cltpt/base::text-link)
+      (let ((dest-filepath
+              (typecase resolved
+                (pathname (cltpt/file-utils:ensure-filepath-string resolved))
+                (cltpt/roam:node (cltpt/roam:node-file resolved))
+                (t dest))))
+        (if (probe-file dest-filepath)
+            (lem:find-file dest-filepath)
+            (lem:message "file ~A doesnt exist" dest-filepath))))))
 
 (lem:define-file-type ("org") organ-mode)

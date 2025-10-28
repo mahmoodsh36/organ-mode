@@ -251,9 +251,7 @@ MODE-SETUP is an optional function called when the mode is activated."
          (line-num (lem:line-number-at-point point)))
     ;; find the node at this point
     (let ((node (lem:text-property-at point :outline-node)))
-      (format t "node found: ~A~%" node)
       (when node
-        (format t "toggling node: ~A~%" (cltpt/tree/outline:outline-text node))
         (outline-mode-toggle node)
         ;; re-render the outline after expanding/collapsing
         (render-outline buffer (get-outline-forest buffer))
