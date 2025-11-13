@@ -38,12 +38,12 @@
       (lem:insert-string start-point replacement-text))))
 
 (defun replace-submatch-text (buffer text-obj submatch-id new-text)
-  (let* ((match (cltpt/base:text-object-combinator-match text-obj))
+  (let* ((match (cltpt/base:text-object-match text-obj))
          (submatch (cltpt/combinator:find-submatch match submatch-id)))
     (replace-text-between-positions
      buffer
-     (1+ (getf (car submatch) :begin))
-     (1+ (getf (car submatch) :end))
+     (1+ (cltpt/combinator:match-begin submatch))
+     (1+ (cltpt/combinator:match-end submatch))
      new-text)))
 
 (defun format-timestamp (&optional (timestamp (local-time:now)))

@@ -4,6 +4,9 @@
 
 (in-package :organ/organ-mode)
 
+;; organ-redraw-buffer is written in highlighting.lisp
+(declaim (ftype function organ-redraw-buffer))
+
 ;; incremental parsing doesnt yet work correctly.
 ;; while the functionality mostly already exists in 'cltpt', it hasnt been fully
 ;; ported to organ, and the buffer is redrawn on every change regardless.
@@ -25,7 +28,7 @@
 (defvar *organ-mode-hook*
   '((organ-mode-init-all . 0)))
 
-(lem:define-major-mode organ-mode nil
+(lem:define-major-mode *organ-mode* nil
   (:name "organ-mode"
    :keymap *organ-mode-keymap*
    :mode-hook *organ-mode-hook*)
@@ -189,10 +192,15 @@
 ;;         (lem:message "object under cursor (~A) isnt a timestamp."
 ;;                      (type-of obj)))))
 
+(defun current-text-obj ()
+  (let ((text-obj (cltpt/base:child-at-pos
+                   (current-tree)
+                   (organ/utils:current-pos))))
+    text-obj))
+
 (lem:define-command organ-insert-timestamp () ()
   "if there is a timestamp at the cursor, edit it using `popup-calendar', otherwise insert new timestamp."
-  (let* ((obj (cltpt/base:child-at-pos (current-tree)
-                                       (organ/utils:current-pos)))
+  (let* ((obj (current-text-obj))
          (pt (lem:buffer-point (lem:current-buffer)))
          (source-buffer (lem:current-buffer)))
     (organ/popup-calendar:popup-calendar-with-callback
@@ -233,4 +241,56 @@
             (lem:find-file dest-filepath)
             (lem:message "file ~A doesnt exist" dest-filepath))))))
 
-(lem:define-file-type ("org") organ-mode)
+(defgeneric text-object-handle-tab (text-obj)
+  (:documentation "tab was pressed over the text-object. handle it if need be."))
+
+(defmethod text-object-handle-tab ((text-obj cltpt/base:text-object))
+  nil)
+
+;; tab in org-table should navigate to the next table, and possibly reorder
+;; the table.
+(defmethod text-object-handle-tab ((text-obj cltpt/org-mode::org-table))
+  (let* ((match (cltpt/base:text-object-match text-obj))
+         (pos (organ/utils:current-pos))
+         (current-cell
+           (cltpt/tree:tree-find-if
+            match
+            (lambda (submatch)
+              (and (>= (1+ pos) (cltpt/combinator:match-begin submatch))
+                   (<= pos (cltpt/combinator:match-end submatch))
+                   (string= (cltpt/combinator:match-id submatch) 'table-cell)))))
+         (current-cell-end (cltpt/combinator:match-end current-cell))
+         ;; 'next-cell' (if any) is simply the cell that has a 'match-begin' greater than the
+         ;; 'match-end' of 'current-cell'
+         ;; TODO: this will not work if we re-order the table though..
+         (next-cell (cltpt/tree:tree-find-if
+                     match
+                     (lambda (submatch)
+                       (and (>= (cltpt/combinator:match-begin submatch) current-cell-end)
+                            (string= (cltpt/combinator:match-id submatch) 'table-cell))))))
+    ;; (lem:message "executing tab in table ~A" (type-of text-obj))
+    ;; (lem:message "executing tab in table ~A" match)
+    ;; (lem:message "executing tab in table ~A" current-cell)
+    (lem:message "pos1 ~A" pos)
+    (lem:message "pos2 ~A" (cltpt/combinator:match-begin current-cell))
+    (lem:message "executing tab in table ~A" (cltpt/combinator:match-text current-cell))
+    ;; (lem:message "executing tab in table ~A" pos)
+    )
+  t)
+
+;; detect tab and dispatch
+(defmethod lem:execute :around ((mode *organ-mode*) command argument)
+  (let* ((key-seq (lem:last-read-key-sequence))
+         (first-key (first key-seq))
+         (text-obj (current-text-obj)))
+    (if (and first-key
+             text-obj
+             (or (and (lem:key-p first-key)
+                      (string= (lem:key-sym first-key) "Tab"))
+                 (eql (lem:insertion-key-p first-key) #\Tab)))
+        ;; if it returns `nil' we 'delegate' the action.
+        (unless (text-object-handle-tab text-obj)
+          (call-next-method))
+        (call-next-method))))
+
+(lem:define-file-type ("org") *organ-mode*)

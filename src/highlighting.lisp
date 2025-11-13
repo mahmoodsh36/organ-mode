@@ -36,10 +36,10 @@
 ;; overlay with the given attribute
 (defun overlay-for-submatch (buf obj submatch-id attribute)
   "a function DRYing highilighting of submatches."
-  (let* ((match (cltpt/base:text-object-property obj :combinator-match))
-         (submatch (car (cltpt/combinator:find-submatch match submatch-id)))
-         (submatch-begin (getf submatch :begin))
-         (submatch-end (getf submatch :end)))
+  (let* ((match (cltpt/base:text-object-match obj))
+         (submatch (cltpt/combinator:find-submatch match submatch-id))
+         (submatch-begin (cltpt/combinator:match-begin submatch))
+         (submatch-end (cltpt/combinator:match-end submatch)))
     (when submatch
       (lem:make-overlay (organ/utils:char-offset-to-point buf submatch-begin)
                         (organ/utils:char-offset-to-point buf submatch-end)
@@ -48,11 +48,11 @@
 ;; like `overlay-for-submatch', except that it acts on all submatches found by id
 (defun overlay-for-all-submatches (buf obj submatch-id attribute)
   "a function DRYing highilighting of submatches."
-  (let* ((match (cltpt/base:text-object-property obj :combinator-match))
+  (let* ((match (cltpt/base:text-object-match obj))
          (submatches (cltpt/combinator:find-submatch-all match submatch-id)))
     (loop for submatch in submatches
-          for submatch-begin = (getf (car submatch) :begin)
-          for submatch-end = (getf (car submatch) :end)
+          for submatch-begin = (cltpt/combinator:match-begin submatch)
+          for submatch-end = (cltpt/combinator:match-end submatch)
           collect (lem:make-overlay
                    (organ/utils:char-offset-to-point buf submatch-begin)
                    (organ/utils:char-offset-to-point buf submatch-end)

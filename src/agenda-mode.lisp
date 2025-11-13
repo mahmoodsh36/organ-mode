@@ -68,7 +68,7 @@
           (setf header text-obj)))
     (when header
       (let* ((pos (cltpt/base:text-object-begin-in-root header))
-             ;; (match (cltpt/base:text-object-combinator-match header))
+             ;; (match (cltpt/base:text-object-match header))
              (task (cltpt/agenda:text-object-task header))
              (state (cltpt/agenda:task-state task))
              ;; (next-state (cltpt/agenda:cycle state))
