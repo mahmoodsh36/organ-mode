@@ -34,6 +34,11 @@
    :mode-hook *organ-mode-hook*)
   (setf (lem:variable-value 'lem:enable-syntax-highlight) t))
 
+(defvar *org-table-add-row-on-tab* t
+  "when non-nil, pressing Tab in the last cell of an org-table will
+reformat the table and add a new empty row. When nil, it will only
+reformat the table and the cursor will remain in the last cell.")
+
 (defun organ-mode-init-all ()
   "called when organ-mode is started, adds modification hooks to reparse buffer."
   (init-tree)
@@ -247,35 +252,79 @@
 (defmethod text-object-handle-tab ((text-obj cltpt/base:text-object))
   nil)
 
-;; tab in org-table should navigate to the next table, and possibly reorder
-;; the table.
 (defmethod text-object-handle-tab ((text-obj cltpt/org-mode::org-table))
   (let* ((match (cltpt/base:text-object-match text-obj))
-         (pos (organ/utils:current-pos))
-         (current-cell
-           (cltpt/tree:tree-find-if
-            match
-            (lambda (submatch)
-              (and (>= (1+ pos) (cltpt/combinator:match-begin submatch))
-                   (<= pos (cltpt/combinator:match-end submatch))
-                   (string= (cltpt/combinator:match-id submatch) 'table-cell)))))
-         (current-cell-end (cltpt/combinator:match-end current-cell))
-         ;; 'next-cell' (if any) is simply the cell that has a 'match-begin' greater than the
-         ;; 'match-end' of 'current-cell'
-         ;; TODO: this will not work if we re-order the table though..
-         (next-cell (cltpt/tree:tree-find-if
-                     match
-                     (lambda (submatch)
-                       (and (>= (cltpt/combinator:match-begin submatch) current-cell-end)
-                            (string= (cltpt/combinator:match-id submatch) 'table-cell))))))
-    ;; (lem:message "executing tab in table ~A" (type-of text-obj))
-    ;; (lem:message "executing tab in table ~A" match)
-    ;; (lem:message "executing tab in table ~A" current-cell)
-    (lem:message "pos1 ~A" pos)
-    (lem:message "pos2 ~A" (cltpt/combinator:match-begin current-cell))
-    (lem:message "executing tab in table ~A" (cltpt/combinator:match-text current-cell))
-    ;; (lem:message "executing tab in table ~A" pos)
-    )
+         (initial-pos (organ/utils:current-pos))
+         (table-start-pos (cltpt/combinator:match-begin match)))
+    (let ((cell (cltpt/tree:tree-find-if
+                 match
+                 (lambda (submatch)
+                   (and (>= (1+ initial-pos) (cltpt/combinator:match-begin submatch))
+                        (<= initial-pos (cltpt/combinator:match-end submatch))
+                        (string= (cltpt/combinator:match-id submatch) 'table-cell))))))
+      (if (not cell)
+          ;; if not in a cell, just reformat and don't move the cursor.
+          (let ((new-table-str (cltpt/org-mode::reformat-table match)))
+            (organ/utils:replace-submatch-text* (lem:current-buffer) match new-table-str))
+          (let* ((current-coords (cltpt/org-mode::get-cell-coordinates cell))
+                 (new-table-str (cltpt/org-mode::reformat-table match)))
+            (multiple-value-bind (new-table-match new-pos-ignored)
+                (cltpt/org-mode::org-table-matcher nil new-table-str 0)
+              (multiple-value-bind (final-string-to-insert final-cursor-pos)
+                  (let ((next-coords (cltpt/org-mode::get-next-data-cell-coords
+                                      new-table-match
+                                      current-coords)))
+                    (if next-coords
+                        ;; there is a next cell
+                        (let* ((next-cell (cltpt/org-mode::get-cell-at-coordinates
+                                           new-table-match
+                                           next-coords))
+                               (pos (+ table-start-pos
+                                       (cltpt/combinator:match-begin next-cell)
+                                       1)))
+                          (values new-table-str pos))
+                        ;; no next cell (at the last cell)
+                        (if *org-table-add-row-on-tab*
+                            ;; add a new row
+                            (let* ((col-widths
+                                     (let ((widths (make-array 0 :adjustable t :fill-pointer t)))
+                                       (dolist (row (cltpt/org-mode::table-match-to-nested-list
+                                                     new-table-match
+                                                     nil))
+                                         (loop for cell-text in row for i from 0 do
+                                           (when (>= i (length widths))
+                                             (vector-push-extend 0 widths))
+                                           (setf (aref widths i)
+                                                 (max (aref widths i)
+                                                      (length cell-text)))))
+                                       widths))
+                                   (new-row-str
+                                     (with-output-to-string (s)
+                                       (write-char cltpt/org-mode::*table-v-delimiter* s)
+                                       (loop for width across col-widths
+                                             do (format s " ~vA ~c"
+                                                        width
+                                                        ""
+                                                        cltpt/org-mode::*table-v-delimiter*))
+                                       (write-char #\newline s)))
+                                   (final-str (concatenate 'string new-table-str new-row-str))
+                                   (pos (+ table-start-pos (length new-table-str) 2)))
+                              (values final-str pos))
+                            ;; stay in the last cell
+                            (let* ((last-cell (cltpt/org-mode::get-cell-at-coordinates
+                                               new-table-match
+                                               current-coords))
+                                   (pos (+ table-start-pos
+                                           (cltpt/combinator:match-begin last-cell)
+                                           1)))
+                              (values new-table-str pos)))))
+                (organ/utils:replace-submatch-text*
+                 (lem:current-buffer)
+                 match
+                 final-string-to-insert)
+                (lem:move-point (lem:current-point)
+                                (organ/utils:char-offset-to-point (lem:current-buffer)
+                                                                  final-cursor-pos))))))))
   t)
 
 ;; detect tab and dispatch

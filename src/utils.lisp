@@ -2,7 +2,7 @@
   (:use :cl)
   (:export
    :char-offset-to-point :current-pos :replace-text-between-positions
-   :format-timestamp :replace-submatch-text))
+   :format-timestamp :replace-submatch-text :replace-submatch-text*))
 
 (in-package :organ/utils)
 
@@ -11,8 +11,11 @@
     (lem:character-offset start offset)
     start))
 
+(defun point-to-char-offset (point)
+  (1- (lem:position-at-point point)))
+
 (defun current-pos ()
-  (1- (lem:position-at-point (lem:current-point))))
+  (point-to-char-offset (lem:current-point)))
 
 (defun delete-text-between-positions (buffer start-pos end-pos)
   "delete text between two absolute positions (indices) in the buffer."
@@ -37,13 +40,19 @@
       (lem:delete-between-points start-point end-point)
       (lem:insert-string start-point replacement-text))))
 
+(defun replace-submatch-text* (buffer submatch new-text)
+  (replace-text-between-positions
+   buffer
+   (1+ (cltpt/combinator:match-begin submatch))
+   (1+ (cltpt/combinator:match-end submatch))
+   new-text))
+
 (defun replace-submatch-text (buffer text-obj submatch-id new-text)
   (let* ((match (cltpt/base:text-object-match text-obj))
          (submatch (cltpt/combinator:find-submatch match submatch-id)))
-    (replace-text-between-positions
+    (replace-submatch-text*
      buffer
-     (1+ (cltpt/combinator:match-begin submatch))
-     (1+ (cltpt/combinator:match-end submatch))
+     submatch
      new-text)))
 
 (defun format-timestamp (&optional (timestamp (local-time:now)))
