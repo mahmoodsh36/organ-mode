@@ -305,10 +305,9 @@ reformat the table and the cursor will remain in the last cell.")
                                              do (format s " ~vA ~c"
                                                         width
                                                         ""
-                                                        cltpt/org-mode::*table-v-delimiter*))
-                                       (write-char #\newline s)))
-                                   (final-str (concatenate 'string new-table-str new-row-str))
-                                   (pos (+ table-start-pos (length new-table-str) 2)))
+                                                        cltpt/org-mode::*table-v-delimiter*))))
+                                   (final-str (concatenate 'string new-table-str (string #\newline) new-row-str))
+                                   (pos (+ table-start-pos (length new-table-str) 1 2)))
                               (values final-str pos))
                             ;; stay in the last cell
                             (let* ((last-cell (cltpt/org-mode::get-cell-at-coordinates
