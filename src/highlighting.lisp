@@ -1,22 +1,28 @@
 (in-package :organ/organ-mode)
 
 (defvar *header-stars-attribute*
-  (lem:make-attribute :foreground  "#FFFACD"))
+  (lem:make-attribute :foreground  "#FFFACD"
+                      :background (lem:background-color)))
 
 (defvar *header-title-attribute*
-  (lem:make-attribute :foreground  "#ab3b33"))
+  (lem:make-attribute :foreground  "#ab3b33"
+                      :background (lem:background-color)))
 
 (defvar *header-todo-attribute*
-  (lem:make-attribute :foreground  "#9d5ee0"))
+  (lem:make-attribute :foreground  "#9d5ee0"
+                      :background (lem:background-color)))
 
 (defvar *timestamp-attribute*
-  (lem:make-attribute :foreground  "#9d5ee0"))
+  (lem:make-attribute :foreground  "#9d5ee0"
+                      :background (lem:background-color)))
 
 (defvar *block-attribute*
-  (lem:make-attribute :foreground  "#FFFACD"))
+  (lem:make-attribute :foreground  "#FFFACD"
+                      :background (lem:background-color)))
 
 (defvar *default-attribute*
-  (lem:make-attribute :foreground  "#FFFACD"))
+  (lem:make-attribute :foreground  "#FFFACD"
+                      :background (lem:background-color)))
 
 ;; should return a list of attributes for lem for "syntax highlighting" in a buffer
 ;; technically could be used for more than just syntax highlighting
