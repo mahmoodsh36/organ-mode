@@ -1,12 +1,21 @@
 (defpackage :organ/agenda-mode
   (:use :cl)
-  (:export :agenda-mode-open))
+  (:export :agenda-mode-open :interactive-render-node))
 
 (in-package :organ/agenda-mode)
 
 (defvar *agenda-mode-keymap*
   (lem:make-keymap :name '*agenda-mode-keymap*
                    :parent organ/outline-mode:*outline-mode-keymap*))
+
+(lem:define-attribute *agenda-keyword-attribute*
+  (t :foreground "blue" :background nil))
+
+(lem:define-attribute *agenda-time-attribute*
+  (t :foreground "red" :background nil))
+
+(lem:define-attribute *agenda-state-attribute*
+  (t :foreground "purple" :background nil))
 
 ;; (lem:undefine-key *agenda-mode-keymap* "Return")
 (lem:define-key *agenda-mode-keymap* "Return" 'agenda-mode-follow)
@@ -30,8 +39,7 @@
              (pos (cltpt/base:text-object-begin-in-root text-obj))
              (buffer (lem:find-file-buffer filepath)))
         (lem:switch-to-buffer buffer)
-        (lem:move-to-position (lem:current-point) pos)
-        (lem:message "node1: ~A, ~A" pos text-obj)))))
+        (lem:move-to-position (lem:current-point) pos)))))
 
 (defun agenda-mode-open (agenda)
   (let ((buffer (lem:make-buffer "*agenda*")))
@@ -42,6 +50,63 @@
       (organ/outline-mode:render-outline buffer forest))
     (lem:switch-to-buffer buffer)
     buffer))
+
+(defmethod organ/outline-mode:interactive-render-node ((node cltpt/agenda:task-record)
+                                                       buffer
+                                                       point
+                                                       depth
+                                                       click-handler)
+  "render a node interactively with clickable regions."
+  (lem:message "gothere ~A~%" node)
+  (let* ((indent (make-string (* depth 2) :initial-element #\space))
+         ;; mark the start of the line
+         (line-start-pos (lem:copy-point point :temporary)))
+    (lem:insert-string point indent)
+    ;; add the tree connector symbol based on whether node has children
+    (if (cltpt/tree/outline:could-expand node)
+        (lem:insert-string point
+                           (if (cltpt/tree/outline:should-expand node)
+                               "- "
+                               "+ "))
+        (lem:insert-string point "  ")) ;; indentation for leaf
+    ;; this should be in-sync with `(defmethod cltpt/tree/outline:outline-text ((rec task-record))'
+    (labels ((format-ts (ts)
+               (local-time:format-timestring
+                nil
+                ts
+                :format cltpt/agenda:*agenda-time-format*))
+             (format-time (time)
+               (if (typep time 'cltpt/agenda:time-range)
+                   (format nil "~A--~A"
+                           (format-ts (cltpt/agenda:time-range-begin time))
+                           (format-ts (cltpt/agenda:time-range-end time)))
+                   (format-ts time))))
+      (let ((task1 (cltpt/agenda:task-record-task node))
+            (prefix-keyword (cond
+                              ((cltpt/agenda:deadline node)
+                               "DEADLINE")
+                              ((cltpt/agenda:start-task node)
+                               "START"))))
+        (when prefix-keyword
+          (lem:insert-string point prefix-keyword :attribute '*agenda-keyword-attribute*)
+          (lem:insert-string point ": "))
+        (lem:insert-string point "(")
+        (lem:insert-string
+         point
+         (princ-to-string (cltpt/agenda:state-name (cltpt/agenda:task-state task1)))
+         :attribute '*agenda-state-attribute*)
+        (lem:insert-string point ")")
+        (lem:insert-string point " ")
+        (lem:insert-string point
+                           (format-time (cltpt/agenda:task-record-time node))
+                           :attribute '*agenda-time-attribute*)
+        (lem:insert-string point " ")
+        (lem:insert-string point (cltpt/agenda:task-title task1))))
+    (let ((node-end-pos (lem:copy-point point :temporary))) ;; save position before newline
+      (lem:insert-character point #\newline)
+      ;; set properties for the line
+      (lem:put-text-property line-start-pos node-end-pos :clickable click-handler)
+      (lem:put-text-property line-start-pos node-end-pos :outline-node node))))
 
 (lem:define-command agenda-mode-change-task-state () ()
   (let ((header))

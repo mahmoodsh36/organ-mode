@@ -105,6 +105,7 @@
 
 (defmethod interactive-render-node ((node t) buffer point depth click-handler)
   "render a node interactively with clickable regions."
+  (lem:message "gothere2 ~A~%" node)
   (let* ((indent (make-string (* depth 2) :initial-element #\space))
          (line-start-pos (lem:copy-point point :right-inserting))) ;; mark the start of the line
     (lem:insert-string point indent)
@@ -112,8 +113,10 @@
     (if (cltpt/tree/outline:could-expand node)
         (lem:insert-string point
                            (if (cltpt/tree/outline:should-expand node)
-                               "▼ "    ;; down arrow for expanded
-                               "▶ "))  ;; right arrow for collapsed
+                               ;; "▼ "  ;; down arrow for expanded
+                               ;; "▶ "  ;; right arrow for collapsed
+                               "- "
+                               "+ "))
         (lem:insert-string point "  ")) ;; indentation for leaf
     ;; insert the node text
     (lem:insert-string point
@@ -121,10 +124,8 @@
     (let ((node-end-pos (lem:copy-point point :left-inserting))) ;; save position before newline
       (lem:insert-character point #\newline)
       ;; set properties for the line
-      (lem:put-text-property line-start-pos node-end-pos
-                             :clickable click-handler)
-      (lem:put-text-property line-start-pos node-end-pos
-                             :outline-node node))))
+      (lem:put-text-property line-start-pos node-end-pos :clickable click-handler)
+      (lem:put-text-property line-start-pos node-end-pos :outline-node node))))
 
 (defmethod outline-mode-toggle ((node outline-node))
   (setf (outline-node-expanded-p node)
