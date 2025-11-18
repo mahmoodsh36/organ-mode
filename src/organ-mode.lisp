@@ -23,7 +23,8 @@
 (lem:define-keys *organ-mode-navigation-keymap*
   ("n" 'organ-next-element)
   ("p" 'organ-prev-element)
-  )
+  ("N" 'organ-next-header)
+  ("P" 'organ-prev-header))
 
 (defvar *organ-mode-hook*
   '((organ-mode-init-all . 0)))
@@ -90,63 +91,50 @@ reformat the table and the cursor will remain in the last cell.")
 (defun current-tree ()
   (lem:buffer-value (lem:current-buffer) 'cltpt-tree))
 
-(defmethod object-closest-before-pos ((text-obj cltpt/base:text-object) pos)
-  "finds the text object ending closest to but before POS."
-  (let ((best-candidate))
-    ;; the current object itself is a potential candidate if it ends before the cursor.
-    (when (< (cltpt/base:text-object-end-in-root text-obj) pos)
-      (setf best-candidate text-obj))
-    ;; now check the children for a potentially better (closer) candidate.
-    (loop for child in (cltpt/base:text-object-children text-obj)
-          do
-             ;; if a child starts at or after the cursor position,
-             ;; then no subsequent sibling or descendant can be a valid "before" candidate.
-             ;; we can stop searching entirely.
-             (when (>= (cltpt/base:text-object-begin-in-root child) pos)
-               (return-from object-closest-before-pos best-candidate))
-             ;; recurse into the child to find the best candidate in that subtree.
-             (let ((candidate-from-child (object-closest-before-pos child pos)))
-               ;; if the recursive call found a better candidate (one that ends later), update our best.
-               (when (and candidate-from-child
-                          (> (cltpt/base:text-object-end-in-root
-                              candidate-from-child)
-                             (if best-candidate
-                                 (cltpt/base:text-object-end-in-root best-candidate)
-                                 -1)))
-                 (setf best-candidate candidate-from-child))))
-    best-candidate))
-
-(defmethod object-closest-after-pos ((text-obj cltpt/base:text-object) pos)
+;; TODO: why are we accepting a text-object if we are using position-in-root anyway?
+(defmethod object-closest-after-pos ((tree cltpt/base:text-object)
+                                     pos
+                                     &optional (predicate #'cltpt/base:tautology))
   "finds the text object starting closest to but after POS using an efficient."
-  ;; if the entire object ends before our position, it and all its
-  ;; children are irrelevant. We can prune this entire branch.
-  (when (<= (cltpt/base:text-object-end-in-root text-obj) pos)
+  ;; if the entire object ends before our position, it and all its children are irrelevant. we can
+  ;; prune this entire branch.
+  (when (<= (cltpt/base:text-object-end-in-root tree) pos)
     (return-from object-closest-after-pos nil))
   (let ((best-candidate))
-    ;; step 1: The current object itself is a potential candidate.
-    ;; if it starts after the cursor, it's our current best guess.
-    (when (> (cltpt/base:text-object-begin-in-root text-obj) pos)
-      (setf best-candidate text-obj))
-    ;; step 2: now, search the children to see if one of them contains a better candidate.
-    ;; a "better" candidate is one that also starts after `pos` but is closer (has a smaller start position).
-    (loop for child in (cltpt/base:text-object-children text-obj)
-          do
-             ;; if the child starts after our current best candidate,
-             ;; there's no point in searching it or any subsequent siblings, as they will
-             ;; all be further away.
-             (when (and best-candidate
-                        (>= (cltpt/base:text-object-begin-in-root child)
-                            (cltpt/base:text-object-begin-in-root best-candidate)))
-               (return))
-             (let ((candidate-from-child (object-closest-after-pos child pos)))
-               ;; if the recursive call found a valid candidate in the child's branch...
+    ;; the current object itself is a potential candidate. if it starts after the cursor,
+    ;; it's our current best guess.
+    (when (and (> (cltpt/base:text-object-begin-in-root tree) pos)
+               (funcall predicate tree))
+      (setf best-candidate tree))
+    ;; search the children to see if one of them contains a better candidate. a "better" candidate
+    ;; is one that also starts after `pos` but is closer (has a smaller start position).
+    (loop for child in (cltpt/base:text-object-children tree)
+          do (let ((candidate-from-child (object-closest-after-pos child pos predicate)))
                (when candidate-from-child
-                 ;; ...and that candidate is better than our current best...
                  (if (or (null best-candidate)
-                         (< (cltpt/base:text-object-begin-in-root
-                             candidate-from-child)
+                         (< (cltpt/base:text-object-begin-in-root candidate-from-child)
                             (cltpt/base:text-object-begin-in-root best-candidate)))
-                     ;; ...then it becomes the new best candidate.
+                     ;; no need to check predicate here because its guaranteed to have done
+                     ;; by the recursive call to the child.
+                     (setf best-candidate candidate-from-child)))))
+    best-candidate))
+
+(defmethod object-closest-before-pos ((tree cltpt/base:text-object)
+                                       pos
+                                       &optional (predicate #'cltpt/base:tautology))
+  "finds the text object ending closest to but before POS using an efficient search."
+  (when (>= (cltpt/base:text-object-begin-in-root tree) pos)
+    (return-from object-closest-before-pos nil))
+  (let ((best-candidate))
+    (when (and (< (cltpt/base:text-object-begin-in-root tree) pos)
+               (funcall predicate tree))
+      (setf best-candidate tree))
+    (loop for child in (cltpt/base:text-object-children tree)
+          do (let ((candidate-from-child (object-closest-before-pos child pos predicate)))
+               (when candidate-from-child
+                 (if (or (null best-candidate)
+                         (> (cltpt/base:text-object-begin-in-root candidate-from-child)
+                            (cltpt/base:text-object-begin-in-root best-candidate)))
                      (setf best-candidate candidate-from-child)))))
     best-candidate))
 
@@ -165,6 +153,36 @@ reformat the table and the cursor will remain in the last cell.")
   (let* ((tr (current-tree))
          (pos (1- (lem:position-at-point (lem:current-point))))
          (prev (object-closest-before-pos tr pos))
+         (new-pos (when prev (cltpt/base:text-object-begin-in-root prev))))
+    (when new-pos
+      (lem:move-point (lem:current-point)
+                      (organ/utils:char-offset-to-point
+                       (lem:current-buffer)
+                       new-pos)))))
+
+(lem:define-command organ-next-header () ()
+  (let* ((tr (current-tree))
+         (pos (1- (lem:position-at-point (lem:current-point))))
+         (next (object-closest-after-pos
+                tr
+                pos
+                (lambda (obj)
+                  (typep obj 'cltpt/org-mode:org-header))))
+         (new-pos (when next (cltpt/base:text-object-begin-in-root next))))
+    (when new-pos
+      (lem:move-point (lem:current-point)
+                      (organ/utils:char-offset-to-point
+                       (lem:current-buffer)
+                       new-pos)))))
+
+(lem:define-command organ-prev-header () ()
+  (let* ((tr (current-tree))
+         (pos (1- (lem:position-at-point (lem:current-point))))
+         (prev (object-closest-before-pos
+                tr
+                pos
+                (lambda (obj)
+                  (typep obj 'cltpt/org-mode:org-header))))
          (new-pos (when prev (cltpt/base:text-object-begin-in-root prev))))
     (when new-pos
       (lem:move-point (lem:current-point)
