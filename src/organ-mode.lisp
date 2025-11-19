@@ -16,15 +16,16 @@
 
 (defvar *organ-mode-keymap*
   (lem:make-keymap :name '*organ-mode-keymap* :parent lem:*global-keymap*))
-(defvar *organ-mode-navigation-keymap*
-  (lem:make-keymap :name '*organ-mode-keymap* :parent lem:*global-keymap*))
 
-(lem:define-key *organ-mode-keymap* "C-l" *organ-mode-navigation-keymap*)
-(lem:define-keys *organ-mode-navigation-keymap*
-  ("n" 'organ-next-element)
-  ("p" 'organ-prev-element)
-  ("N" 'organ-next-header)
-  ("P" 'organ-prev-header))
+(lem:define-keys *organ-mode-keymap*
+  ("C-c n" 'organ-next-element)
+  ("C-c p" 'organ-prev-element)
+  ("C-c C-n" 'organ-next-header)
+  ("C-c C-p" 'organ-prev-header)
+  ("C-c C-x C-n" 'organ-next-link)
+  ("C-c C-x C-p" 'organ-prev-link)
+  ("C-c C-v C-n" 'organ-next-src-block)
+  ("C-c C-v C-p" 'organ-prev-src-block))
 
 (defvar *organ-mode-hook*
   '((organ-mode-init-all . 0)))
@@ -160,35 +161,61 @@ reformat the table and the cursor will remain in the last cell.")
                        (lem:current-buffer)
                        new-pos)))))
 
-(lem:define-command organ-next-header () ()
+(defun organ-next-element-of-type (type)
   (let* ((tr (current-tree))
          (pos (1- (lem:position-at-point (lem:current-point))))
          (next (object-closest-after-pos
                 tr
                 pos
                 (lambda (obj)
-                  (typep obj 'cltpt/org-mode:org-header))))
-         (new-pos (when next (cltpt/base:text-object-begin-in-root next))))
+                  (typep obj type))))
+         (new-pos (when next
+                    (cltpt/base:text-object-begin-in-root next))))
     (when new-pos
       (lem:move-point (lem:current-point)
                       (organ/utils:char-offset-to-point
                        (lem:current-buffer)
                        new-pos)))))
 
-(lem:define-command organ-prev-header () ()
+(defun organ-prev-element-of-type (type)
   (let* ((tr (current-tree))
          (pos (1- (lem:position-at-point (lem:current-point))))
          (prev (object-closest-before-pos
                 tr
                 pos
                 (lambda (obj)
-                  (typep obj 'cltpt/org-mode:org-header))))
-         (new-pos (when prev (cltpt/base:text-object-begin-in-root prev))))
+                  (typep obj type))))
+         (new-pos (when prev
+                    (cltpt/base:text-object-begin-in-root prev))))
     (when new-pos
       (lem:move-point (lem:current-point)
                       (organ/utils:char-offset-to-point
                        (lem:current-buffer)
                        new-pos)))))
+
+(lem:define-command organ-next-header () ()
+  (organ-next-element-of-type 'cltpt/org-mode:org-header))
+
+(lem:define-command organ-prev-header () ()
+  (organ-prev-element-of-type 'cltpt/org-mode:org-header))
+
+(lem:define-command organ-next-link () ()
+  (organ-next-element-of-type 'cltpt/org-mode:org-link))
+
+(lem:define-command organ-prev-link () ()
+  (organ-prev-element-of-type 'cltpt/org-mode:org-link))
+
+(lem:define-command organ-next-src-block () ()
+  (organ-next-element-of-type 'cltpt/org-mode:org-src-block))
+
+(lem:define-command organ-prev-src-block () ()
+  (organ-prev-element-of-type 'cltpt/org-mode:org-src-block))
+
+(lem:define-command organ-next-block () ()
+  (organ-next-element-of-type 'cltpt/org-mode:org-block))
+
+(lem:define-command organ-prev-block () ()
+  (organ-prev-element-of-type 'cltpt/org-mode:org-block))
 
 ;; this used calendar-mode.lisp directly instead of the popup
 ;; (lem:define-command edit-timestamp () ()
