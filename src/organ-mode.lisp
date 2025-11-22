@@ -291,13 +291,7 @@ reformat the table and the cursor will remain in the last cell.")
             (lem:find-file dest-filepath)
             (lem:message "file ~A doesnt exist" dest-filepath))))))
 
-(defgeneric text-object-handle-tab (text-obj)
-  (:documentation "tab was pressed over the text-object. handle it if need be."))
-
-(defmethod text-object-handle-tab ((text-obj cltpt/base:text-object))
-  nil)
-
-(defmethod text-object-handle-tab ((text-obj cltpt/org-mode::org-table))
+(defmethod org-table-tab ((text-obj cltpt/org-mode:org-table))
   (let* ((match (cltpt/base:text-object-match text-obj))
          (initial-pos (organ/utils:current-pos))
          (table-start-pos (cltpt/combinator:match-begin match)))
@@ -351,7 +345,10 @@ reformat the table and the cursor will remain in the last cell.")
                                                         width
                                                         ""
                                                         cltpt/org-mode::*table-v-delimiter*))))
-                                   (final-str (concatenate 'string new-table-str (string #\newline) new-row-str))
+                                   (final-str (concatenate 'string
+                                                           new-table-str
+                                                           (string #\newline)
+                                                           new-row-str))
                                    (pos (+ table-start-pos (length new-table-str) 1 2)))
                               (values final-str pos))
                             ;; stay in the last cell
@@ -368,22 +365,81 @@ reformat the table and the cursor will remain in the last cell.")
                  final-string-to-insert)
                 (lem:move-point (lem:current-point)
                                 (organ/utils:char-offset-to-point (lem:current-buffer)
-                                                                  final-cursor-pos))))))))
-  t)
+                                                                  final-cursor-pos)))))))))
+
+(defmethod org-table-shift-tab ((text-obj cltpt/org-mode:org-table))
+  (let* ((match (cltpt/base:text-object-match text-obj))
+         (initial-pos (organ/utils:current-pos))
+         (table-start-pos (cltpt/combinator:match-begin match)))
+    (let ((cell (cltpt/tree:tree-find-if
+                 match
+                 (lambda (submatch)
+                   (and (>= (1+ initial-pos) (cltpt/combinator:match-begin submatch))
+                        (<= initial-pos (cltpt/combinator:match-end submatch))
+                        (string= (cltpt/combinator:match-id submatch) 'table-cell))))))
+      (if (not cell)
+          ;; if not in a cell, just reformat and don't move the cursor.
+          (let ((new-table-str (cltpt/org-mode::reformat-table match)))
+            (organ/utils:replace-submatch-text* (lem:current-buffer) match new-table-str))
+          (let* ((current-coords (cltpt/org-mode::get-cell-coordinates cell))
+                 (new-table-str (cltpt/org-mode::reformat-table match)))
+            (multiple-value-bind (new-table-match new-pos-ignored)
+                (cltpt/org-mode::org-table-matcher nil new-table-str 0)
+              (let ((all-cells (let ((cells '()))
+                                 (cltpt/tree:tree-find-if
+                                  new-table-match
+                                  (lambda (m)
+                                    (when (string= (cltpt/combinator:match-id m) 'table-cell)
+                                      (push m cells))
+                                    nil))
+                                 (nreverse cells))))
+                (let* ((current-cell-index
+                         (position-if
+                          (lambda (c)
+                            (equal (cltpt/org-mode::get-cell-coordinates c)
+                                   current-coords))
+                          all-cells))
+                       (prev-cell (when (and current-cell-index (> current-cell-index 0))
+                                    (nth (1- current-cell-index) all-cells))))
+                  (multiple-value-bind (final-string-to-insert final-cursor-pos)
+                      (if prev-cell
+                          (let ((pos (+ table-start-pos
+                                        (cltpt/combinator:match-begin prev-cell)
+                                        1)))
+                            (values new-table-str pos))
+                          ;; stay in the first cell
+                          (let* ((first-cell (nth current-cell-index all-cells))
+                                 (pos (+ table-start-pos
+                                         (cltpt/combinator:match-begin first-cell)
+                                         1)))
+                            (values new-table-str pos)))
+                    (organ/utils:replace-submatch-text*
+                     (lem:current-buffer)
+                     match
+                     final-string-to-insert)
+                    (lem:move-point (lem:current-point)
+                                    (organ/utils:char-offset-to-point (lem:current-buffer)
+                                                                      final-cursor-pos)))))))))))
 
 ;; detect tab and dispatch
 (defmethod lem:execute :around ((mode *organ-mode*) command argument)
   (let* ((key-seq (lem:last-read-key-sequence))
          (first-key (first key-seq))
-         (text-obj (current-text-obj)))
-    (if (and first-key
-             text-obj
-             (or (and (lem:key-p first-key)
-                      (string= (lem:key-sym first-key) "Tab"))
-                 (eql (lem:insertion-key-p first-key) #\Tab)))
-        ;; if it returns `nil' we 'delegate' the action.
-        (unless (text-object-handle-tab text-obj)
-          (call-next-method))
+         (text-obj (current-text-obj))
+         (table-found (loop for node = text-obj then (cltpt/base:text-object-parent node)
+                            while node
+                            when (typep node 'cltpt/org-mode:org-table)
+                              return node)))
+    (if text-obj
+        (cond
+          ((and (equal (lem-core::parse-keyspec "Shift-Tab") key-seq)
+                table-found)
+           (org-table-shift-tab table-found))
+          ((and (equal (lem-core::parse-keyspec "Tab") key-seq)
+                table-found)
+           (org-table-tab table-found))
+          ;; delegate to default action
+          (t (call-next-method)))
         (call-next-method))))
 
 (lem:define-file-type ("org") *organ-mode*)
