@@ -66,23 +66,8 @@ reformat the table and the cursor will remain in the last cell.")
          (begin-pos (1- (lem:position-at-point start-point)))
          (end-pos (1- (lem:position-at-point end-point)))
          (cltpt-tree (lem:buffer-value buf 'cltpt-tree)))
-    (if *organ-enable-incremental-changes*
-        (cltpt/base:handle-change cltpt-tree
-                              cltpt/org-mode:*org-mode*
-                              begin-pos
-                              (lem:buffer-text buf))
-        (setf (lem:buffer-value buf 'cltpt-tree)
-              (cltpt/base:parse cltpt/org-mode:*org-mode* (lem:buffer-text buf))))
-    ;; this is wrong
-    ;; (cltpt/base:handle-changed-regions
-    ;;  cltpt-tree
-    ;;  cltpt/org-mode:*org-mode*
-    ;;  (list (cons
-    ;;         new-text
-    ;;         (cltpt/base:make-region
-    ;;          :begin begin-pos
-    ;;          :end (+ begin-pos change-in-length))))
-    ;;  t)
+    (setf (lem:buffer-value buf 'cltpt-tree)
+          (cltpt/base:parse cltpt/org-mode:*org-mode* (lem:buffer-text buf)))
     (organ-redraw-buffer buf)
     ;; (lem:message "custom syntax highlighting triggered in ~A, size is ~A"
     ;;              (lem:buffer-name buf)
@@ -398,7 +383,6 @@ reformat the table and the cursor will remain in the last cell.")
                                       (organ/utils:char-offset-to-point
                                        (lem:current-buffer)
                                        final-cursor-pos)))))))))))
-
 
 ;; detect tab and dispatch
 (defmethod lem:execute :around ((mode *organ-mode*) command argument)

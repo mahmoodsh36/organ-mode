@@ -57,7 +57,6 @@
                                                        depth
                                                        click-handler)
   "render a node interactively with clickable regions."
-  (lem:message "gothere ~A~%" node)
   (let* ((indent (make-string (* depth 2) :initial-element #\space))
          ;; mark the start of the line
          (line-start-pos (lem:copy-point point :temporary)))
