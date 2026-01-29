@@ -16,7 +16,7 @@
 (defvar *popup-calendar-current-buffer* nil)
 
 (defvar *popup-calendar-prompt-keymap*
-  (make-keymap :name '*popup-calendar-prompt-keymap*))
+  (make-keymap :description '*popup-calendar-prompt-keymap*))
 
 (defun parse-date-time-input (input-string)
   "parse date-time input like '+2d', 'sat', '19', 'sat 10:00', '19 20:00' etc.

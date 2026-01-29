@@ -15,7 +15,7 @@
   "whether to enable incremental changes in `organ-mode'.")
 
 (defvar *organ-mode-keymap*
-  (lem:make-keymap :name '*organ-mode-keymap* :parent lem:*global-keymap*))
+  (lem:make-keymap :description '*organ-mode-keymap* :parent lem:*global-keymap*))
 
 (lem:define-keys *organ-mode-keymap*
   ("C-c n" 'organ-next-element)

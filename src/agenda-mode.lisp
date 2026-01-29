@@ -5,7 +5,7 @@
 (in-package :organ/agenda-mode)
 
 (defvar *agenda-mode-keymap*
-  (lem:make-keymap :name '*agenda-mode-keymap*
+  (lem:make-keymap :description '*agenda-mode-keymap*
                    :parent organ/outline-mode:*outline-mode-keymap*))
 
 (lem:define-attribute *agenda-keyword-attribute*
