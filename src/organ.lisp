@@ -1,5 +1,5 @@
 (defpackage :organ
-  (:use :cl)
+  (:use :cl :lem/transient :lem/core)
   (:export :*organ-files*))
 
 (in-package :organ)
@@ -8,12 +8,38 @@
   nil
   "a list of rules according to which to look for and parse files. see `cltpt/roam:find-files'.")
 
-(defun organ-setup-keys ()
-  (lem:define-key lem:*global-keymap* "C-c a" 'agenda-mode-open)
-  (lem:define-key lem:*global-keymap* "C-c r" 'roam-find)
-  )
+(define-transient *organ-keymap*
+  :display-style :row
+  :description "keys for organ-mode that can be invoked from outside the mode itself."
+  (:keymap
+   :display-style :column
+   (:keymap
+    :display-style :column
+    :description "agenda options"
+    (:key "d" :suffix test :description "display DONE tasks")
+    (:key "r" :suffix test :description "range of dates to be displayed"))
+   (:keymap
+    :display-style :column
+    :description "roam options"
+    (:key "f" :suffix test :description "roam files (not yet implemented)" :active-p nil)))
+  (:keymap
+   :display-style :column
+   :description "quick agenda actions"
+   (:key "a" :suffix agenda-mode-open :description "open agenda")
+   (:key "r" :suffix roam-find :description "find roam node"))
+  (:key "c"
+   :description "publish (export-all)"
+   :suffix (:keymap
+            :display-style :column
+            (:key "o" :suffix test :description "output dir")
+            (:key "i" :suffix test :description "tags to include")
+            (:key "x" :suffix test :description "tags to exclude (undoes inclusion)")
+            (:key "s" :suffix test :description "static file output dir")
+            (:key "S" :suffix test :description "copy static files")
+            (:key "h" :suffix test :description "convert all files to html")
+            (:key "l" :suffix test :description "convert all files to latex"))))
 
-(organ-setup-keys)
+(lem:define-key lem:*global-keymap* "C-c r" *organ-keymap*)
 
 (defun string-starts-with-p (prefix string)
   (let ((len (length prefix)))
