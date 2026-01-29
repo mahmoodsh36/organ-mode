@@ -119,8 +119,7 @@
                    (text-obj (cltpt/roam:node-text-obj roam-node))
                    (pos (1+ (cltpt/base:text-object-begin-in-root text-obj))))
               (setf header text-obj)
-              (setf buffer (lem:find-file-buffer filepath))
-              (lem:switch-to-buffer buffer)
+              (lem:switch-to-buffer (lem:find-file-buffer filepath))
               (lem:move-to-position (lem:current-point)
                                     pos))))
         (let ((text-obj (cltpt/base:child-at-pos

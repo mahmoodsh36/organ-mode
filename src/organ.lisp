@@ -1,5 +1,5 @@
 (defpackage :organ
-  (:use :cl :lem/transient :lem/core)
+  (:use :cl :lem :lem/transient)
   (:export :*organ-files*))
 
 (in-package :organ)
