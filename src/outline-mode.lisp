@@ -177,7 +177,7 @@ MODE-SETUP is an optional function called when the mode is activated."
   (let ((keymap-name (intern (format nil "*~A-KEYMAP*" (string mode-name))))
         (mode-hook-name (intern (format nil "~A-HOOK" (string mode-name)))))
     `(progn
-       (defvar ,keymap-name (lem:make-keymap :name ',keymap-name
+       (defvar ,keymap-name (lem:make-keymap :description ',keymap-name
                                              :parent *outline-mode-keymap*))
        ,@(mapcar (lambda (binding)
                    `(lem:define-key
