@@ -12,21 +12,28 @@
   :display-style :row
   :description "keys for organ-mode that can be invoked from outside the mode itself."
   (:keymap
-   :display-style :column
+   :display-style :row
    (:keymap
     :display-style :column
-    :description "agenda options"
-    (:key "d" :suffix test :description "display DONE tasks")
-    (:key "r" :suffix test :description "range of dates to be displayed"))
+    (:keymap
+     :description "agenda actions"
+     (:key "a" :suffix agenda-open :description "open agenda"))
+    (:keymap
+     :description "agenda options"
+     (:key "d"
+      :type toggle
+      :description "display DONE tasks"
+      :variable cltpt/agenda:*agenda-include-done*)
+     (:key "R" :suffix test :description "timestamp range")))
    (:keymap
     :display-style :column
-    :description "roam options"
-    (:key "f" :suffix test :description "roam files (not yet implemented)" :active-p nil)))
-  (:keymap
-   :display-style :column
-   :description "quick agenda actions"
-   (:key "a" :suffix agenda-mode-open :description "open agenda")
-   (:key "r" :suffix roam-find :description "find roam node"))
+    (:keymap
+     :description "roam actions"
+     (:key "r" :suffix roam-find :description "browse nodes")
+     (:key "l" :suffix test :description "list nodes"))
+    (:keymap
+     :description "roam options"
+     (:key "f" :suffix test :description "roam files (not yet implemented)" :active-p nil))))
   (:key "c"
    :description "publish (export-all)"
    :suffix (:keymap
@@ -82,7 +89,7 @@
         (lem:find-file dest-file))
       (lem:message "you must customize *organ-files* first.")))
 
-(lem:define-command agenda-mode-open () ()
+(lem:define-command agenda-open () ()
   (if *organ-files*
       (let* ((rmr (cltpt/roam:from-files *organ-files*))
              (agenda (cltpt/agenda:from-roamer rmr)))
