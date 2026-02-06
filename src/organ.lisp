@@ -23,7 +23,7 @@
      (:key "d"
       :type toggle
       :description "display DONE tasks"
-      :variable cltpt/agenda:*agenda-include-done*)
+      :variable cltpt:*agenda-include-done*)
      (:key "R" :suffix test :description "timestamp range")))
    (:keymap
     :display-style :column
