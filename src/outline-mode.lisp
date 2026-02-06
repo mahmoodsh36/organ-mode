@@ -149,29 +149,25 @@
 (defparameter +outline-forest+ 'outline-forest)
 (defparameter +outline-action-function+ 'outline-action-function)
 
-;; function to get the outline forest for a buffer
 (defun get-outline-forest (buffer)
   "get the outline forest associated with a buffer."
   (lem:buffer-value buffer +outline-forest+))
 
-;; function to set the outline forest for a buffer
 (defun set-outline-forest (buffer forest)
   "set the outline forest for a buffer."
   (setf (lem:buffer-value buffer +outline-forest+) forest))
 
-;; function to set the outline action function for a buffer
 (defun set-outline-action-function (buffer action-function)
   "set the outline action function for a buffer."
   (setf (lem:buffer-value buffer +outline-action-function+) action-function))
 
-;; function to get the outline action function for a buffer
 (defun get-outline-action-function (buffer)
   "get the outline action function for a buffer."
   (lem:buffer-value buffer +outline-action-function+))
 
-;; helper function to create custom outline modes
 (defun create-custom-outline-mode (mode-name key-bindings &optional mode-setup)
   "create a custom outline mode with inherited keymap and custom key bindings.
+
 KEY-BINDINGS is a list of (key-string command-symbol) pairs.
 MODE-SETUP is an optional function called when the mode is activated."
   (let ((keymap-name (intern (format nil "*~A-KEYMAP*" (string mode-name))))
@@ -193,12 +189,10 @@ MODE-SETUP is an optional function called when the mode is activated."
          ,@(when mode-setup
              `((funcall ,mode-setup)))))))
 
-;; function to find the node at the current line in the buffer
 (defun node-at-point (point)
   "find the outline node at the given point in the buffer."
   (lem:text-property-at point :outline-node))
 
-;; function to render the outline forest to the buffer
 (defun render-outline (buffer forest)
   "render the outline forest to the buffer."
   (lem:with-buffer-read-only buffer nil
@@ -208,12 +202,11 @@ MODE-SETUP is an optional function called when the mode is activated."
         (dolist (node forest)
           (render-node point node 0))))))
 
-;; function to recursively render a node and its children
 (defun render-node (point node depth)
   "render a single node and its children recursively."
   (interactive-render-node
    node
-    (lem:current-buffer)
+   (lem:current-buffer)
    point
    depth
    (lambda (window clicked-point)
@@ -224,7 +217,6 @@ MODE-SETUP is an optional function called when the mode is activated."
     (dolist (child (cltpt/tree:tree-children node))
       (render-node point child (1+ depth)))))
 
-;; command to expand/collapse the node at the current point
 (lem:define-command outline-expand-collapse () ()
   "expand or collapse the node at the current point."
   (let ((point (lem:current-point)))
@@ -232,7 +224,6 @@ MODE-SETUP is an optional function called when the mode is activated."
     (outline-expand-collapse-at-point point)
     (finish-output)))
 
-;; command to perform an action on the node at the current point
 (lem:define-command outline-action-at-point () ()
   "perform an action on the node at the current point."
   (let ((point (lem:current-point)))
@@ -248,7 +239,6 @@ MODE-SETUP is an optional function called when the mode is activated."
   "kill the outline buffer."
   (lem:kill-buffer (lem:current-buffer)))
 
-;; helper function to expand/collapse at a specific point
 (defun outline-expand-collapse-at-point (point)
   "expand or collapse the node at the given point."
   (let* ((buffer (lem:current-buffer))
@@ -262,9 +252,9 @@ MODE-SETUP is an optional function called when the mode is activated."
         ;; restore cursor position based on the line number
         (lem:move-to-line (lem:buffer-point buffer) line-num)))))
 
-;; main function to open an outline with the given forest
 (defun open-outline (forest &key action-function)
   "open an outline buffer with the given forest structure.
+
 ACTION-FUNCTION is an optional function that takes a node as argument
 and is called when Return is pressed on a node."
   (let ((buffer (lem:make-buffer "*outline*")))
@@ -480,7 +470,6 @@ and is called when Return is pressed on a node."
                          (lem:move-to-column point 1)
                          (return))))))))))
 
-;; command to create an outline with a simple test forest
 (lem:define-command test-outline () ()
   "test command to open a sample outline."
   (let* ((subchild1 (create-outline-node "subchild 1.2.1"))
