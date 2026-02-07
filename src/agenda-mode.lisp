@@ -6,7 +6,7 @@
 
 (defvar *agenda-mode-keymap*
   (lem:make-keymap :description '*agenda-mode-keymap*
-                   :extend organ/outline-mode:*outline-mode-keymap*))
+                   :base organ/outline-mode:*outline-mode-keymap*))
 
 (lem:define-attribute *agenda-keyword-attribute*
   (t :foreground "blue" :background nil))
