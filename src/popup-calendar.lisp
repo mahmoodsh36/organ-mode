@@ -4,11 +4,11 @@
 
 (in-package :organ/popup-calendar)
 
-(define-editor-variable *popup-calendar-date* nil)
-(define-editor-variable *popup-calendar-callback* nil)
-(define-editor-variable *popup-calendar-source-buffer* nil)
-(define-editor-variable *popup-calendar-window* nil)
-(define-editor-variable *popup-calendar-parsed-date* nil)
+(define-editor-variable popup-calendar-date nil)
+(define-editor-variable popup-calendar-callback nil)
+(define-editor-variable popup-calendar-source-buffer nil)
+(define-editor-variable popup-calendar-window nil)
+(define-editor-variable popup-calendar-date nil)
 
 ;; these variables are not buffer-isolated but the intended workflow
 ;; doenst require that anyway.
@@ -18,151 +18,129 @@
 (defvar *popup-calendar-prompt-keymap*
   (make-keymap :description '*popup-calendar-prompt-keymap*))
 
+(defparameter +popup-calendar-buffer-name+ "*popup-calendar*")
+(defvar *calendar-grid-width* 3)
+(defvar *calendar-grid-height* 1)
+(defvar *popup-window-width* 95)
+(defvar *popup-window-height* 8)
+
+(defparameter *weekday-name-map*
+  '(("sun" . 0)
+    ("mon" . 1)
+    ("tue" . 2)
+    ("wed" . 3)
+    ("thu" . 4)
+    ("fri" . 5)
+    ("sat" . 6)))
+
+(defun parse-time-part (time-string)
+  "parse time string like '10:00'. returns (values hour minute) or nil."
+  (when (and time-string (not (string= time-string "")))
+    (let ((colon-pos (position #\: time-string)))
+      (when colon-pos
+        (let* ((hour-str (subseq time-string 0 colon-pos))
+               (min-str (subseq time-string (1+ colon-pos)))
+               (hour (parse-integer hour-str :junk-allowed t))
+               (minute (parse-integer min-str :junk-allowed t)))
+          (when (and hour minute (<= 0 hour 23) (<= 0 minute 59))
+            (values hour minute)))))))
+
+(defun parse-relative-date (date-part)
+  "parse relative date like +2d, +1w. returns timestamp or nil."
+  (when (and (> (length date-part) 1)
+             (char= (char date-part 0) #\+)
+             (digit-char-p (char date-part 1)))
+    (let* ((num-str (subseq date-part 1))
+           (num (parse-integer num-str :junk-allowed t))
+           (unit (if (> (length date-part) 2) (subseq date-part 2) "d")))
+      (when num
+        (let ((unit-keyword (case (aref unit 0)
+                              (#\d :day)
+                              (#\w :week)
+                              (#\m :month)
+                              (#\y :year))))
+          (when unit-keyword
+            (local-time:timestamp+ (local-time:now) num unit-keyword)))))))
+
+(defun parse-weekday-name (date-part)
+  "parse weekday name like 'sat', 'monday'. returns next occurrence timestamp or nil."
+  (when (and (>= (length date-part) 3)
+             (every #'alpha-char-p date-part))
+    (let* ((day-name (string-downcase date-part))
+           (prefix (subseq day-name 0 3))
+           (entry (assoc prefix *weekday-name-map* :test #'string-equal))
+           (target-dow (cdr entry)))
+      (when target-dow
+        (let* ((now (local-time:now))
+               (current-dow (local-time:timestamp-day-of-week now))
+               (days-ahead (mod (- target-dow current-dow) 7)))
+          (when (zerop days-ahead) (setf days-ahead 7))
+          (local-time:timestamp+ now days-ahead :day))))))
+
+(defun parse-day-of-month (date-part)
+  "parse day of month like '19'. returns timestamp for current or next month, or nil."
+  (when (every #'digit-char-p date-part)
+    (let* ((day (parse-integer date-part))
+           (now (local-time:now))
+           (current-month (local-time:timestamp-month now))
+           (current-year (local-time:timestamp-year now))
+           (days-in-month (local-time:days-in-month current-month current-year)))
+      (when (and day (<= 1 day 31))
+        (let ((try-date (ignore-errors
+                         (local-time:encode-timestamp 0 0 0 0 day current-month current-year))))
+          (cond
+            ((and try-date (local-time:timestamp>= try-date now))
+             try-date)
+            (t
+             ;; try next month
+             (let* ((next-month (if (= current-month 12) 1 (1+ current-month)))
+                    (next-year (if (= current-month 12) (1+ current-year) current-year))
+                    (next-days (local-time:days-in-month next-month next-year)))
+               (when (<= day next-days)
+                 (local-time:encode-timestamp 0 0 0 0 day next-month next-year))))))))))
+
+(defun parse-full-date (date-part)
+  "parse date like 15/05 or 15/05/2023. returns timestamp or nil."
+  (when (find #\/ date-part)
+    (let* ((parts (uiop:split-string date-part :separator "/"))
+           (day (parse-integer (first parts) :junk-allowed t))
+           (month (parse-integer (second parts) :junk-allowed t))
+           (year (when (>= (length parts) 3)
+                   (parse-integer (third parts) :junk-allowed t))))
+      (when (and day month (<= 1 day 31) (<= 1 month 12))
+        (let ((final-year (or year (local-time:timestamp-year (local-time:now)))))
+          (when (>= final-year 1900)
+            (local-time:encode-timestamp 0 0 0 0 day month final-year)))))))
+
 (defun parse-date-time-input (input-string)
-  "parse date-time input like '+2d', 'sat', '19', 'sat 10:00', '19 20:00' etc.
-returns a local-time timestamp or nil if parsing fails."
+  "parse date-time input. Returns a local-time timestamp or nil.
+
+supported formats:
+- relative: +1d, +2w, +1m, +1y.
+- weekday: sat, mon, thursday (next occurrence).
+- day of month: 19 (current or next month).
+- full date: 15/05, 15/05/2023.
+- time: [date] 10:00"
   (when (and input-string (not (string= input-string "")))
     (let* ((trimmed (string-trim '(#\space #\tab) input-string))
            (parts (uiop:split-string trimmed :separator " "))
            (date-part (first parts))
-           (time-part (second parts)))
-      (flet ((parse-time (time-string)
-               (when (and time-string (not (string= time-string "")))
-                 (let ((colon-pos (position #\: time-string)))
-                   (when colon-pos
-                     (let* ((hour-str (subseq time-string 0 colon-pos))
-                            (min-str (subseq time-string (1+ colon-pos)))
-                            (hour (parse-integer hour-str :junk-allowed t))
-                            (minute (parse-integer min-str :junk-allowed t)))
-                       (when (and hour
-                                  minute
-                                  (>= hour 0)
-                                  (<= hour 23)
-                                  (>= minute 0)
-                                  (<= minute 59))
-                         (values hour minute))))))))
-        (let ((base-date))
-          (cond
-            ;; relative dates like +2d, +1w, +3m
-            ((and (> (length date-part) 1)
-                  (char= (char date-part 0) #\+)
-                  (digit-char-p (char date-part 1)))
-             (let* ((num-str (subseq date-part 1))
-                    (num (parse-integer num-str :junk-allowed t))
-                    (unit (if (> (length date-part) 2)
-                              (subseq date-part 2)
-                              "d")))
-               (when num
-                 (let ((unit-keyword (case (aref unit 0)
-                                       (#\d :day)
-                                       (#\w :week)
-                                       (#\m :month)
-                                       (#\y :year)
-                                       (otherwise nil))))
-                   (when unit-keyword
-                     (setf base-date
-                           (local-time:timestamp+ (local-time:now)
-                                                  num
-                                                  unit-keyword)))))))
-            ;; day names like 'sat', 'sun', 'mon', etc.
-            ((and (>= (length date-part) 3)
-                  (every #'alpha-char-p date-part))
-             (let* ((day-name (string-downcase date-part))
-                    (target-dow
-                      (cond
-                        ;; sunday = 6 in local-time (0=Mon)
-                        ((and (>= (length day-name) 3)
-                              (string= (subseq day-name 0 3) "sun"))
-                         6)
-                        ((and (>= (length day-name) 3)
-                              (string= (subseq day-name 0 3) "mon"))
-                         0)
-                        ((and (>= (length day-name) 3)
-                              (string= (subseq day-name 0 3) "tue"))
-                         1)
-                        ((and (>= (length day-name) 3)
-                              (string= (subseq day-name 0 3) "wed"))
-                         2)
-                        ((and (>= (length day-name) 3)
-                              (string= (subseq day-name 0 3) "thu"))
-                         3)
-                        ((and (>= (length day-name) 3)
-                              (string= (subseq day-name 0 3) "fri"))
-                         4)
-                        ((and (>= (length day-name) 3)
-                              (string= (subseq day-name 0 3) "sat"))
-                         5)
-                        (t nil))))
-               (when target-dow
-                 (let* ((now (local-time:now))
-                        (current-dow (local-time:timestamp-day-of-week now))
-                        (days-ahead (mod (- target-dow current-dow) 7)))
-                   (when (zerop days-ahead) ;; if today, use next week
-                     (setf days-ahead 7))
-                   (setf base-date
-                         (local-time:timestamp+ now days-ahead :day))))))
-            ;; day numbers like '19'
-            ((every #'digit-char-p date-part)
-             (let* ((day (parse-integer date-part))
-                    (now (local-time:now))
-                    (current-month (local-time:timestamp-month now))
-                    (current-year (local-time:timestamp-year now))
-                    (days-in-month (local-time:days-in-month current-month current-year)))
-               (when (and day (>= day 1) (<= day 31))
-                 (let ((try-date (local-time:encode-timestamp
-                                  0 0 0 0 day current-month current-year)))
-                   (if (and (<= day days-in-month)
-                            (local-time:timestamp>= try-date now))
-                       (setf base-date try-date)
-                       ;; try next month if current month's day has passed
-                       (let* ((next-month (if (= current-month 12)
-                                              1
-                                              (1+ current-month)))
-                              (next-year (if (= current-month 12)
-                                             (1+ current-year)
-                                             current-year))
-                              (next-days-in-month
-                                (local-time:days-in-month next-month next-year)))
-                         (when (<= day next-days-in-month)
-                           (setf base-date
-                                 (local-time:encode-timestamp
-                                  0 0 0 0
-                                  day
-                                  next-month
-                                  next-year)))))))))
-            ;; full date like day/month/year, day/month, or dd/mm/yyyy
-            ((find #\/ date-part)
-             (let* ((parts (uiop:split-string date-part :separator "/"))
-                    (day (parse-integer (first parts) :junk-allowed t))
-                    (month (parse-integer (second parts) :junk-allowed t))
-                    (year (when (>= (length parts) 3)
-                            (parse-integer (third parts) :junk-allowed t))))
-               (when (and day month
-                          (>= day 1)
-                          (<= day 31)
-                          (>= month 1)
-                          (<= month 12))
-                 (let ((final-year (or year
-                                       (local-time:timestamp-year
-                                        (local-time:now)))))
-                   (when (>= final-year 1900) ;; basic year validation
-                     (setf base-date
-                           (local-time:encode-timestamp
-                            0 0 0 0
-                            day
-                            month
-                            final-year)))))))
-            (t nil))
-          ;; combine with time if available
-          (if (and base-date time-part)
-              (multiple-value-bind (hour minute) (parse-time time-part)
-                (when hour
-                  (local-time:encode-timestamp
-                   0 0 minute hour
-                   (local-time:timestamp-day base-date)
-                   (local-time:timestamp-month base-date)
-                   (local-time:timestamp-year base-date))))
-              base-date))))))
+           (time-part (second parts))
+           (base-date (or (parse-relative-date date-part)
+                          (parse-weekday-name date-part)
+                          (parse-day-of-month date-part)
+                          (parse-full-date date-part))))
+      (if (and base-date time-part)
+          (multiple-value-bind (hour minute) (parse-time-part time-part)
+            (if hour
+                (local-time:encode-timestamp 0
+                                             0
+                                             minute hour
+                                             (local-time:timestamp-day base-date)
+                                             (local-time:timestamp-month base-date)
+                                             (local-time:timestamp-year base-date))
+                base-date))
+          base-date))))
 
 (defun update-calendar-state (buffer target-date)
   "update calendar display, move to date, and refresh highlights in buffer."
@@ -177,25 +155,18 @@ returns a local-time timestamp or nil if parsing fails."
   (when *popup-calendar-active*
     (let ((buffer *popup-calendar-current-buffer*))
       (when buffer
-        (let ((current-date (variable-value '*popup-calendar-parsed-date*
-                                            :buffer buffer)))
-          (let ((target-date
-                  (if current-date
-                      (if (eq direction :next)
-                          (local-time:timestamp+ current-date 1 :day)
-                          (local-time:timestamp- current-date 1 :day))
-                      (if (eq direction :next)
-                          (local-time:timestamp+ (local-time:now) 1 :day)
-                          (local-time:timestamp- (local-time:now) 1 :day)))))
-            (setf (variable-value '*popup-calendar-parsed-date*
-                                  :buffer buffer)
-                  target-date)
-            (update-calendar-state buffer target-date)))))))
+        (let* ((current-date (or (variable-value 'popup-calendar-date :buffer buffer)
+                                 (local-time:now)))
+               (offset (if (eq direction :next) 1 -1))
+               (target-date (local-time:timestamp+ current-date offset :day)))
+          (setf (variable-value 'popup-calendar-date :buffer buffer)
+                target-date)
+          (update-calendar-state buffer target-date))))))
 
 (defun cleanup-popup-calendar (&optional (buffer *popup-calendar-current-buffer*))
   "clean up popup calendar resources."
   (when buffer
-    (let ((window (variable-value '*popup-calendar-window* :buffer buffer)))
+    (let ((window (variable-value 'popup-calendar-window :buffer buffer)))
       (when window
         (delete-window window))
       (organ/calendar-mode:calendar-cleanup buffer)
@@ -213,7 +184,7 @@ returns a local-time timestamp or nil if parsing fails."
                       (parse-date-time-input input))))
     (let ((buffer *popup-calendar-current-buffer*))
       (when buffer
-        (setf (variable-value '*popup-calendar-parsed-date* :buffer buffer)
+        (setf (variable-value 'popup-calendar-date :buffer buffer)
               final-date)
         (if final-date
             (progn
@@ -228,26 +199,36 @@ returns a local-time timestamp or nil if parsing fails."
 
 (defun create-popup-calendar-buffer ()
   "create the calendar buffer for popup display."
-  (let ((buffer (make-buffer "*popup-calendar*"
+  (let ((buffer (make-buffer +popup-calendar-buffer-name+
                              :enable-undo-p nil
                              :temporary t)))
     (with-buffer-read-only buffer nil
-      (setf (variable-value 'organ/calendar-mode:*calendar-grid-width*
-                            :buffer buffer)
-            3)
-      (setf (variable-value 'organ/calendar-mode:*calendar-grid-height*
-                            :buffer buffer)
-            1)
-      (setf (variable-value 'organ/calendar-mode:*calendar-marked-dates*
-                            :buffer buffer)
+      (setf (variable-value 'organ/calendar-mode:calendar-grid-width :buffer buffer)
+            *calendar-grid-width*)
+      (setf (variable-value 'organ/calendar-mode:calendar-grid-height :buffer buffer)
+            *calendar-grid-height*)
+      (setf (variable-value 'organ/calendar-mode:calendar-marked-dates :buffer buffer)
             nil)
-      (setf (variable-value 'organ/calendar-mode:*calendar-date*
-                            :buffer buffer)
+      (setf (variable-value 'organ/calendar-mode:calendar-date :buffer buffer)
             (local-time:now))
-      (setf (variable-value '*popup-calendar-date* :buffer buffer)
+      (setf (variable-value 'popup-calendar-date :buffer buffer)
             (local-time:now))
       (organ/calendar-mode:update-calendar-display buffer))
     buffer))
+
+(defun create-calendar-window (buffer)
+  "create and center the floating window for the calendar."
+  (let* ((display-width (display-width))
+         (display-height (display-height))
+         (x (- (floor display-width 2) (floor *popup-window-width* 2)))
+         (y (- (floor display-height 2) (floor *popup-window-height* 2))))
+    (make-floating-window
+     :buffer buffer
+     :x x
+     :y y
+     :width *popup-window-width*
+     :height *popup-window-height*
+     :use-border t)))
 
 (defun popup-calendar-input-callback (input)
   "callback for prompt input changes."
@@ -255,10 +236,9 @@ returns a local-time timestamp or nil if parsing fails."
     (let ((buffer *popup-calendar-current-buffer*))
       (when buffer
         (update-calendar-highlight-from-input input)
-        ;; force refresh of calendar display
         (update-calendar-state
          buffer
-         (variable-value '*popup-calendar-parsed-date* :buffer buffer))))))
+         (variable-value 'popup-calendar-date :buffer buffer))))))
 
 (define-command popup-calendar-next-day () ()
   "navigate to next day."
@@ -274,90 +254,61 @@ returns a local-time timestamp or nil if parsing fails."
     (cleanup-popup-calendar)))
 
 (defun popup-calendar-with-callback (callback &optional initial-date)
-  "open a popup calendar with a callback function.
-CALLBACK is a function that receives the selected date as argument.
-INITIAL-DATE can be a timestamp or nil for now."
-  (let ((source-buffer (current-buffer)))
-    (let ((calendar-buffer (create-popup-calendar-buffer)))
-      (setf (variable-value '*popup-calendar-callback* :buffer calendar-buffer)
-            callback)
-      (setf (variable-value '*popup-calendar-source-buffer*
-                            :buffer calendar-buffer)
-            source-buffer)
-      (setf *popup-calendar-current-buffer* calendar-buffer)
-      ;; create popup window for calendar (centered)
-      (let* ((display-width (display-width))
-             (display-height (display-height))
-             (window-width 95)
-             (window-height 8)
-             (x (- (floor display-width 2) (floor window-width 2)))
-             (y (- (floor display-height 2) (floor window-height 2)))
-             (calendar-window (make-floating-window
-                               :buffer calendar-buffer
-                               :x x
-                               :y y
-                               :width window-width
-                               :height window-height
-                               :use-border t)))
-        (setf (variable-value '*popup-calendar-window* :buffer calendar-buffer)
-              calendar-window)
-        (setf *popup-calendar-active* t)
-        ;; show window
-        (lem-core::add-floating-window (current-frame) calendar-window)
-        ;; set up initial calendar state (don't switch to buffer)
-        (when initial-date
-          (setf (variable-value 'organ/calendar-mode:*calendar-date*
-                                :buffer calendar-buffer)
-                initial-date)
-          (setf (variable-value '*popup-calendar-date* :buffer calendar-buffer)
-                initial-date)
-          (update-calendar-state calendar-buffer initial-date))
-        ;; refresh highlights for current state
-        (update-calendar-state
-         calendar-buffer
-         (variable-value '*popup-calendar-parsed-date*
-                         :buffer calendar-buffer))
-        ;; start prompt with edit callback
-        (let ((result (handler-case
-                          (prompt-for-string
-                           "date: "
-                           :initial-value ""
-                           :edit-callback #'popup-calendar-input-callback
-                           :test-function (lambda (input)
-                                            ;; handle escape key
-                                            (when (eq input 'escape)
-                                              (popup-calendar-quit)
-                                              nil)
-                                            t)
-                           :special-keymap *popup-calendar-prompt-keymap*)
-                        (error ()
-                          ;; clean up
-                          (popup-calendar-quit)
-                          nil))))
-          (setf *popup-calendar-active* nil)
-          (setf *popup-calendar-current-buffer* nil)
-          ;; use the navigated date if available (from C-n/C-p), otherwise parse prompt
-          (let* ((navigated-date (when calendar-buffer
-                                   (variable-value '*popup-calendar-parsed-date*
-                                                   :buffer calendar-buffer)))
-                 (final-date
-                   (or navigated-date
-                       ;; fallback to parsing prompt result
-                       (parse-date-time-input result))))
-            ;; clean up
-            (cleanup-popup-calendar calendar-buffer)
-            ;; call callback
-            (when callback
-              (if final-date
-                  (funcall callback final-date)
-                  (funcall callback nil)))
-            final-date))))))
+  "open a popup calendar wih CALLBACK. INITIAL-DATE can be a timestamp or nil."
+  (let ((source-buffer (current-buffer))
+        (calendar-buffer (create-popup-calendar-buffer)))
+    (setf (variable-value 'popup-calendar-callback :buffer calendar-buffer)
+          callback
+          (variable-value 'popup-calendar-source-buffer :buffer calendar-buffer)
+          source-buffer
+          *popup-calendar-current-buffer*
+          calendar-buffer)
+    (let ((calendar-window (create-calendar-window calendar-buffer)))
+      (setf (variable-value 'popup-calendar-window :buffer calendar-buffer)
+            calendar-window
+            *popup-calendar-active*
+            t)
+      (lem-core::add-floating-window (current-frame) calendar-window)
+      (unwind-protect
+           (progn
+             (when initial-date
+               (setf (variable-value 'organ/calendar-mode:calendar-date :buffer calendar-buffer)
+                     initial-date
+                     (variable-value 'popup-calendar-date :buffer calendar-buffer)
+                     initial-date)
+               (update-calendar-state calendar-buffer initial-date))
+             (update-calendar-state
+              calendar-buffer
+              (variable-value 'popup-calendar-date :buffer calendar-buffer))
+             (let ((result (handler-case
+                               (prompt-for-string
+                                "date: "
+                                :initial-value ""
+                                :edit-callback #'popup-calendar-input-callback
+                                :test-function (lambda (input)
+                                                 (when (eq input 'escape)
+                                                   (popup-calendar-quit)
+                                                   nil)
+                                                 t)
+                                :special-keymap *popup-calendar-prompt-keymap*)
+                             (error ()
+                               nil))))
+               (setf *popup-calendar-active* nil
+                     *popup-calendar-current-buffer* nil)
+               (let* ((navigated-date (when (buffer-name calendar-buffer)
+                                        (variable-value 'popup-calendar-date
+                                                        :buffer calendar-buffer)))
+                      (final-date (or navigated-date
+                                      (parse-date-time-input result))))
+                 (when callback
+                   (funcall callback final-date))
+                 final-date)))
+        (cleanup-popup-calendar calendar-buffer)))))
 
 (define-command popup-calendar () ()
   "open a popup calendar without callback."
   (popup-calendar-with-callback
    (lambda (date)
-     (message "here ~A~%" date)
      (when date
        (message "selected date: ~A"
                 (local-time:format-timestring
@@ -365,7 +316,6 @@ INITIAL-DATE can be a timestamp or nil for now."
                  date
                  :format '(:long-month " " (:day 2) ", " (:year 4))))))))
 
-;; keybindings - only C-n and C-p for navigation
 (define-key *popup-calendar-prompt-keymap* "C-n" 'popup-calendar-next-day)
 (define-key *popup-calendar-prompt-keymap* "C-p" 'popup-calendar-previous-day)
 (define-key *popup-calendar-prompt-keymap* "Escape" 'popup-calendar-quit)
