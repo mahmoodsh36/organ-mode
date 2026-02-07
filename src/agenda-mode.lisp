@@ -1,5 +1,5 @@
 (defpackage :organ/agenda-mode
-  (:use :cl)
+  (:use :cl :lem)
   (:export :agenda-mode-open :interactive-render-node))
 
 (in-package :organ/agenda-mode)
@@ -17,7 +17,6 @@
 (lem:define-attribute *agenda-state-attribute*
   (t :foreground "purple" :background nil))
 
-;; (lem:undefine-key *agenda-mode-keymap* "Return")
 (lem:define-key *agenda-mode-keymap* "Return" 'agenda-mode-follow)
 
 (lem:define-major-mode agenda-mode organ/outline-mode:outline-mode
@@ -159,3 +158,6 @@
            'cltpt/org-mode::todo-keyword
            ;; we're using princ-to-string since it can be a symbol.. (why tho?)
            (princ-to-string (cltpt/agenda:state-name new-state))))))))
+
+(defmethod lem/transient:mode-transient-keymap ((mode agenda-mode))
+  *agenda-mode-keymap*)
