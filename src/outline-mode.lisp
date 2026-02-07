@@ -108,7 +108,6 @@
 
 (defmethod interactive-render-node ((node t) buffer point depth click-handler)
   "render a node interactively with clickable regions."
-  (lem:message "gothere2 ~A~%" node)
   (let* ((indent (make-string (* depth 2) :initial-element #\space))
          (line-start-pos (lem:copy-point point :right-inserting))) ;; mark the start of the line
     (lem:insert-string point indent)
@@ -230,10 +229,8 @@ MODE-SETUP is an optional function called when the mode is activated."
     (let ((node (lem:text-property-at point :outline-node)))
       (when node
         (let ((action-fn (lem:buffer-value (lem:current-buffer) +outline-action-function+)))
-          (if action-fn
-              (funcall action-fn node)
-              (lem:message "got: ~A"
-                           (cltpt/tree/outline:outline-text node))))))))
+          (when action-fn
+            (funcall action-fn node)))))))
 
 (lem:define-command outline-quit () ()
   "kill the outline buffer."
@@ -243,7 +240,6 @@ MODE-SETUP is an optional function called when the mode is activated."
   "expand or collapse the node at the given point."
   (let* ((buffer (lem:current-buffer))
          (line-num (lem:line-number-at-point point)))
-    ;; find the node at this point
     (let ((node (lem:text-property-at point :outline-node)))
       (when node
         (outline-mode-toggle node)
@@ -300,154 +296,129 @@ and is called when Return is pressed on a node."
     (when node
       (compute-node-depth node))))
 
+(defun scan-lines (buffer start-line end-line step predicate)
+  "scan lines in BUFFER from START-LINE to END-LINE with STEP increment.
+
+for each line, call PREDICATE with the node at that line (or NIL).
+when PREDICATE returns non-NIL, return that line number."
+  (loop for line-num from start-line to end-line by (abs step)
+        for temp-point = (lem:copy-point (lem:buffer-point buffer) :temporary)
+        when (and (lem:move-to-line temp-point line-num)
+                  (lem:move-to-column temp-point 1))
+          do (let ((node (lem:text-property-at temp-point :outline-node)))
+               (when (funcall predicate node)
+                 (return line-num)))))
+
+(defun scan-lines-forward (buffer start-line predicate)
+  "scan lines forward from START-LINE."
+  (scan-lines buffer start-line (lem:buffer-nlines buffer) 1 predicate))
+
+(defun scan-lines-backward (buffer start-line predicate)
+  "scan lines backward from START-LINE."
+  (loop for line-num from start-line downto 1
+        for temp-point = (lem:copy-point (lem:buffer-point buffer) :temporary)
+        when (and (lem:move-to-line temp-point line-num)
+                  (lem:move-to-column temp-point 1))
+          do (let ((node (lem:text-property-at temp-point :outline-node)))
+               (when (funcall predicate node)
+                 (return line-num)))))
+
+(defun move-point-to-line (point line-num)
+  "move POINT to LINE-NUM column 1."
+  (when line-num
+    (lem:move-to-line point line-num)
+    (lem:move-to-column point 1)
+    line-num))
+
 (defun find-sibling-node (point direction)
-  "find the next or previous sibling node."
+  "find the next or previous sibling node (same depth level)."
   (let* ((current-depth (get-node-depth point))
          (current-line (lem:line-number-at-point point))
-         (buffer (lem:point-buffer point))
-         (max-line (lem:buffer-nlines buffer)))
+         (buffer (lem:point-buffer point)))
     (when current-depth
-      (ecase direction
-        (:next
-         (loop for line-num from (1+ current-line) to max-line
-               for temp-point = (lem:copy-point (lem:buffer-point buffer) :temporary)
-               do (when (and (lem:move-to-line temp-point line-num)
-                             (lem:move-to-column temp-point 1))
-                    (let ((node (lem:text-property-at temp-point :outline-node)))
-                      (when (and node
-                                 (= (compute-node-depth node) current-depth))
-                        (return line-num))))))
-        (:previous
-         (loop for line-num from (1- current-line) downto 1
-               for temp-point = (lem:copy-point (lem:buffer-point buffer) :temporary)
-               do (when (and (lem:move-to-line temp-point line-num)
-                             (lem:move-to-column temp-point 1))
-                    (let ((node (lem:text-property-at temp-point :outline-node)))
-                      (when (and node
-                                 (= (compute-node-depth node) current-depth))
-                        (return line-num))))))))))
+      (let ((predicate (lambda (node)
+                         (and node (= (compute-node-depth node) current-depth)))))
+        (ecase direction
+          (:next (scan-lines-forward buffer (1+ current-line) predicate))
+          (:previous (scan-lines-backward buffer (1- current-line) predicate)))))))
 
-(lem:define-command outline-next-sibling () ()
-  "move to next node at same depth."
-  (let* ((point (lem:current-point))
-         (next-line (find-sibling-node point :next)))
-    (when next-line
-      (lem:move-to-line point next-line)
-      (lem:move-to-column point 1))))
-
-(lem:define-command outline-previous-sibling () ()
-  "move to previous node at same depth."
-  (let* ((point (lem:current-point))
-         (prev-line (find-sibling-node point :previous)))
-    (when prev-line
-      (lem:move-to-line point prev-line)
-      (lem:move-to-column point 1))))
+(defun find-node-line (buffer target-node start-line direction)
+  "find the line number of TARGET-NODE starting from START-LINE in DIRECTION."
+  (let ((predicate (lambda (node) (eql node target-node))))
+    (ecase direction
+      (:next (scan-lines-forward buffer start-line predicate))
+      (:previous (scan-lines-backward buffer start-line predicate)))))
 
 (defun find-true-sibling-node (point direction)
-  "finds next or previous true sibling node (same parent)."
+  "find next or previous true sibling node (same parent)."
   (let* ((current-node (lem:text-property-at point :outline-node))
          (current-line (lem:line-number-at-point point))
-         (buffer (lem:current-buffer))
-         (max-line (lem:buffer-nlines buffer)))
+         (buffer (lem:current-buffer)))
     (when current-node
       (multiple-value-bind (found-node parent depth)
           (find-node-in-tree current-node (get-outline-forest buffer))
-        (if parent
-            ;; we have a parent, look for true siblings (children of same parent)
-            (let ((children (cltpt/tree:tree-children parent)))
-              (when children
-                (let ((current-index (position current-node children :test #'eql)))
-                  (when current-index
-                    (ecase direction
-                      (:next
-                       (let ((next-index (1+ current-index)))
-                         (if (< next-index (length children))
-                             ;; found next sibling, find its line number
-                             (let ((next-sibling (elt children next-index)))
-                               (loop for line-num from (1+ current-line) to max-line
-                                     for temp-point = (lem:copy-point (lem:buffer-point buffer) :temporary)
-                                     do (when (and (lem:move-to-line temp-point line-num)
-                                                   (lem:move-to-column temp-point 1))
-                                          (let ((node (lem:text-property-at temp-point :outline-node)))
-                                            (when (eql node next-sibling)
-                                              (return line-num))))))
-                             ;; if last child, go to next parent
-                             (let ((parent-depth (compute-node-depth parent)))
-                               (loop for line-num from (1+ current-line) to max-line
-                                     for temp-point = (lem:copy-point (lem:buffer-point buffer) :temporary)
-                                     do (when (and (lem:move-to-line temp-point line-num)
-                                                   (lem:move-to-column temp-point 1))
-                                          (let ((node (lem:text-property-at temp-point :outline-node)))
-                                            (when (and node
-                                                       (= (compute-node-depth node) parent-depth)
-                                                       (not (eql node parent)))
-                                              (return-from find-true-sibling-node line-num)))))))))
-                      (:previous
-                       (let ((prev-index (1- current-index)))
-                         (if (>= prev-index 0)
-                             ;; found previous sibling, find its line number
-                             (let ((prev-sibling (elt children prev-index)))
-                               (loop for line-num from (1- current-line) downto 1
-                                     for temp-point = (lem:copy-point (lem:buffer-point buffer) :temporary)
-                                     do (when (and (lem:move-to-line temp-point line-num)
-                                                   (lem:move-to-column temp-point 1))
-                                          (let ((node (lem:text-property-at temp-point :outline-node)))
-                                            (when (eql node prev-sibling)
-                                              (return line-num))))))
-                             ;; if first child, go to parent
-                             (loop for line-num from 1 to (1- current-line)
-                                   for temp-point = (lem:copy-point (lem:buffer-point buffer) :temporary)
-                                   do (when (and (lem:move-to-line temp-point line-num)
-                                                 (lem:move-to-column temp-point 1))
-                                        (let ((node (lem:text-property-at temp-point :outline-node)))
-                                          (when (eql node parent)
-                                            (return-from find-true-sibling-node line-num)))))))))))))
-            ;; no parent (root level), look for next/previous root node
-            (let ((forest (get-outline-forest buffer)))
-              (when forest
-                (let ((current-index (position current-node forest :test #'eql)))
-                  (when current-index
-                    (ecase direction
-                      (:next
-                       (let ((next-index (1+ current-index)))
-                         (when (< next-index (length forest))
-                           ;; found next root, find its line number
-                           (let ((next-root (elt forest next-index)))
-                             (loop for line-num from (1+ current-line) to max-line
-                                   for temp-point = (lem:copy-point (lem:buffer-point buffer) :temporary)
-                                   do (when (and (lem:move-to-line temp-point line-num)
-                                                 (lem:move-to-column temp-point 1))
-                                        (let ((node (lem:text-property-at temp-point :outline-node)))
-                                          (when (eql node next-root)
-                                            (return line-num)))))))))
-                      (:previous
-                       (let ((prev-index (1- current-index)))
-                         (when (>= prev-index 0)
-                           ;; found previous root, find its line number
-                           (let ((prev-root (elt forest prev-index)))
-                             (loop for line-num from (1- current-line) downto 1
-                                   for temp-point = (lem:copy-point (lem:buffer-point buffer) :temporary)
-                                   do (when (and (lem:move-to-line temp-point line-num)
-                                                 (lem:move-to-column temp-point 1))
-                                        (let ((node (lem:text-property-at temp-point :outline-node)))
-                                          (when (eql node prev-root)
-                                            (return line-num)))))))))))))))))))
+        (declare (ignore found-node depth))
+        (let ((siblings (if parent
+                            (cltpt/tree:tree-children parent)
+                            (get-outline-forest buffer))))
+          (when siblings
+            (let ((current-index (position current-node siblings :test #'eql)))
+              (when current-index
+                (ecase direction
+                  (:next (find-next-true-sibling
+                          buffer current-line siblings current-index parent))
+                  (:previous (find-previous-true-sibling
+                              buffer current-line siblings current-index parent)))))))))))
 
-(lem:define-command outline-next-true-sibling () ()
-  "move to next true sibling (same parent)."
-  (let* ((point (lem:current-point))
-         (next-line (find-true-sibling-node point :next)))
-    (when next-line
-      (lem:move-to-line point next-line)
-      (lem:move-to-column point 1))))
+(defun find-next-true-sibling (buffer current-line siblings current-index parent)
+  "find the next true sibling's line number."
+  (let ((next-index (1+ current-index)))
+    (if (< next-index (length siblings))
+        (find-node-line buffer (elt siblings next-index) (1+ current-line) :next)
+        ;; last child. if we have a parent, go to next node at parent's depth
+        (when parent
+          (let ((parent-depth (compute-node-depth parent)))
+            (scan-lines-forward
+             buffer
+             (1+ current-line)
+             (lambda (node)
+               (and node
+                    (= (compute-node-depth node) parent-depth)
+                    (not (eql node parent))))))))))
 
-(lem:define-command outline-previous-true-sibling () ()
-  "move to previous true sibling (same parent)."
-  (let* ((point (lem:current-point))
-         (prev-line (find-true-sibling-node point :previous)))
-    (when prev-line
-      (lem:move-to-line point prev-line)
-      (lem:move-to-column point 1))))
+(defun find-previous-true-sibling (buffer current-line siblings current-index parent)
+  "find the previous true sibling's line number."
+  (let ((prev-index (1- current-index)))
+    (if (>= prev-index 0)
+        (find-node-line buffer (elt siblings prev-index) (1- current-line) :previous)
+        ;; first child. go to parent
+        (when parent
+          (find-node-line buffer parent (1- current-line) :previous)))))
+
+;; this is just to DRY things
+(defmacro define-sibling-command (name docstring find-fn direction)
+  "define an outline sibling navigation command."
+  `(lem:define-command ,name () ()
+     ,docstring
+     (let* ((point (lem:current-point))
+            (target-line (,find-fn point ,direction)))
+       (move-point-to-line point target-line))))
+
+(define-sibling-command outline-next-sibling
+    "move to next node at same depth."
+  find-sibling-node :next)
+
+(define-sibling-command outline-previous-sibling
+    "move to previous node at same depth."
+  find-sibling-node :previous)
+
+(define-sibling-command outline-next-true-sibling
+    "move to next true sibling (same parent)."
+  find-true-sibling-node :next)
+
+(define-sibling-command outline-previous-true-sibling
+    "move to previous true sibling (same parent)."
+  find-true-sibling-node :previous)
 
 (lem:define-command outline-go-to-parent () ()
   "go to parent of current node."
@@ -459,16 +430,9 @@ and is called when Return is pressed on a node."
           (find-node-in-tree current-node (get-outline-forest buffer))
         (declare (ignore found-node depth))
         (when parent
-          ;; Find parent's line number by searching from the beginning
-          (loop for line-num from 1 to (lem:line-number-at-point point)
-                for temp-point = (lem:copy-point point :temporary)
-                do (when (and (lem:move-to-line temp-point line-num)
-                              (lem:move-to-column temp-point 1))
-                     (let ((node (lem:text-property-at temp-point :outline-node)))
-                       (when (eql node parent)
-                         (lem:move-to-line point line-num)
-                         (lem:move-to-column point 1)
-                         (return))))))))))
+          (move-point-to-line
+           point
+           (find-node-line buffer parent (lem:line-number-at-point point) :previous)))))))
 
 (lem:define-command test-outline () ()
   "test command to open a sample outline."
@@ -480,11 +444,10 @@ and is called when Return is pressed on a node."
          (node2 (create-outline-node "root 2"))
          (child3 (create-outline-node "child 3.1"))
          (node3 (create-outline-node "root 3" :children (list child3))))
-
     (open-outline (list node1 node2 node3)
                   :action-function
                   (lambda (node)
-                    (lem:message "Custom action on: ~A"
+                    (lem:message "at node: ~A"
                                  (cltpt/tree/outline:outline-text node))))))
 
 ;; make it work in vim-mode normal state
