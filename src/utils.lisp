@@ -62,5 +62,5 @@
                 timestamp
                 :format '(:year "-" (:month 2) "-" (:day 2))))
          (weekday (nth (local-time:timestamp-day-of-week timestamp)
-                       '("Mon" "Tue" "Wed" "Thu" "Fri" "Sat" "Sun"))))
+                       '("Sun" "Mon" "Tue" "Wed" "Thu" "Fri" "Sat"))))
     (format nil "<~A ~A>" base weekday)))

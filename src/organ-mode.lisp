@@ -239,6 +239,7 @@ reformat the table and the cursor will remain in the last cell.")
          (pt (lem:buffer-point (lem:current-buffer)))
          (source-buffer (lem:current-buffer)))
     (organ/popup-calendar:popup-calendar-with-callback
+     "date: "
      (lambda (new-date)
        (when new-date
          (lem:with-current-buffer source-buffer

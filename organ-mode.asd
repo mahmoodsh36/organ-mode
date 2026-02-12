@@ -27,5 +27,5 @@
                 :components ((:file "agenda-mode")))
                (:module "organ"
                 :pathname "src/"
-                :depends-on ("organ-mode")
+                :depends-on ("organ-mode" "popup-calendar" "agenda")
                 :components ((:file "organ")))))

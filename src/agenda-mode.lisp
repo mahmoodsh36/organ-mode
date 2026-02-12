@@ -40,11 +40,14 @@
         (lem:switch-to-buffer buffer)
         (lem:move-to-position (lem:current-point) pos)))))
 
-(defun agenda-mode-open (agenda)
+(defun agenda-mode-open (agenda &key begin-ts end-ts)
   (let ((buffer (lem:make-buffer "*agenda*")))
     (lem:change-buffer-mode buffer 'agenda-mode)
     (setf (lem:buffer-value buffer 'agenda) agenda)
-    (let ((forest (cltpt/agenda:build-agenda-forest agenda)))
+    (let ((forest (cltpt/agenda:build-agenda-forest
+                   agenda
+                   :begin-ts begin-ts
+                   :end-ts end-ts)))
       (organ/outline-mode:set-outline-forest buffer forest)
       (organ/outline-mode:render-outline buffer forest))
     (lem:switch-to-buffer buffer)
