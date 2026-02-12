@@ -243,7 +243,6 @@ for :backward, finds the object starting closest before POS."
                        (<= initial-pos (cltpt/combinator:match-end-absolute submatch))
                        (string= (cltpt/combinator:match-id submatch) 'table-cell)))))
          (effective-cell (or cell
-                             ;; find the nearest cell before the cursor
                              (let ((best))
                                (cltpt/tree:tree-walk
                                 match
@@ -260,91 +259,46 @@ for :backward, finds the object starting closest before POS."
           (organ/utils:replace-submatch-text* (lem:current-buffer) match new-table-str))
         (let* ((current-coords (cltpt/org-mode::get-cell-coordinates effective-cell))
                (new-table-str (cltpt/org-mode::reformat-table table-str match)))
-          (multiple-value-bind (new-table-match new-pos-ignored)
-              (cltpt/org-mode::org-table-matcher nil (cltpt/reader:reader-from-string new-table-str) 0)
+          (multiple-value-bind (new-table-match pos)
+              (cltpt/org-mode::org-table-matcher
+               nil
+               (cltpt/reader:reader-from-string new-table-str)
+               0)
             (let* ((width (cltpt/org-mode::get-table-width new-table-match))
                    (height (cltpt/org-mode::get-table-height new-table-match))
-                   (current-x (car current-coords))
-                   (current-y (cdr current-coords))
-                   ;; convert current position to linear
-                   (current-linear (+ (* current-y width) current-x))
-                   ;; convert shift to linear offset: x-shift is columns, y-shift is rows
-                   ;; when cursor was on a non-cell (e.g. hrule), the fallback already
-                   ;; jumped backward to the nearest cell, so neutralize backward shift
+                   (current-linear (+ (* (cdr current-coords) width) (car current-coords)))
                    (raw-shift (+ x-shift (* y-shift width)))
-                   (shift-linear (if (and (null cell) (< raw-shift 0)) 0 raw-shift))
-                   ;; calculate target position
-                   (target-linear (+ current-linear shift-linear))
-                   ;; convert back to 2d coordinates
-                   (new-y (floor target-linear width))
+                   (shift-linear (if (and (null cell) (< raw-shift 0))
+                                     0
+                                     raw-shift))
+                   (target-linear (max 0 (+ current-linear shift-linear)))
                    (new-x (mod target-linear width))
-                   (target-coords (cons new-x new-y)))
-              ;; (lem:message
-              ;;  "DEBUG: (~A,~A) lin=~A + ~A = ~A => (~A,~A)"
-              ;;  current-x current-y current-linear shift-linear target-linear new-x new-y)
-              ;; check if we need to extend the table
-              (if (>= new-y height)
-                  (let* ((rows-to-add (- new-y (1- height)))
-                         (table-data
-                           (cltpt/org-mode::table-match-to-nested-list new-table-str new-table-match))
-                         ;; add empty rows
-                         (extended-table-data
-                           (append table-data
-                                   (loop repeat rows-to-add
-                                         collect (loop repeat width collect ""))))
-                         (final-table-str
-                           (cltpt/org-mode::nested-list-to-table-string extended-table-data)))
-                    ;; update the table in the buffer
-                    (organ/utils:replace-submatch-text*
-                     (lem:current-buffer)
-                     match
-                     final-table-str)
-                    ;; recalculate the table structure to get correct positions
-                    (multiple-value-bind (updated-table-match updated-pos)
-                        (cltpt/org-mode::org-table-matcher nil (cltpt/reader:reader-from-string final-table-str) 0)
-                      (let* ((target-cell (cltpt/org-mode::get-cell-at-coordinates
-                                           updated-table-match
-                                           target-coords))
-                             (final-cursor-pos
-                               (if target-cell
+                   (new-y (floor target-linear width))
+                   ;; extend table if moving past last row, otherwise reuse
+                   (final-table-str
+                     (if (>= new-y height)
+                         (cltpt/org-mode::nested-list-to-table-string
+                          (append (cltpt/org-mode::table-match-to-nested-list new-table-str new-table-match)
+                                  (loop repeat (- new-y (1- height))
+                                        collect (loop repeat width collect ""))))
+                         new-table-str))
+                   (final-match
+                     (if (string= final-table-str new-table-str)
+                         new-table-match
+                         (cltpt/org-mode::org-table-matcher
+                          nil (cltpt/reader:reader-from-string final-table-str) 0)))
+                   (final-height (cltpt/org-mode::get-table-height final-match))
+                   (target-coords (cons new-x (min new-y (1- final-height))))
+                   (target-cell (cltpt/org-mode::get-cell-at-coordinates final-match target-coords))
+                   (cursor-pos (if target-cell
                                    (+ table-start-pos
                                       (cltpt/combinator:match-begin-absolute target-cell)
                                       1)
-                                   (+ table-start-pos
-                                      (length final-table-str)))))
-                        (lem:move-point (lem:current-point)
-                                        (organ/utils:char-offset-to-point
-                                         (lem:current-buffer)
-                                         final-cursor-pos)))))
-                  ;; within bounds, normal movement
-                  (let* ((clamped-coords (cons new-x (min new-y (1- height))))
-                         (target-cell (cltpt/org-mode::get-cell-at-coordinates
-                                       new-table-match
-                                       clamped-coords)))
-                    (multiple-value-bind (final-string-to-insert final-cursor-pos)
-                        (if target-cell
-                            (let ((pos (+ table-start-pos
-                                          (cltpt/combinator:match-begin-absolute target-cell)
-                                          1)))
-                              (values new-table-str pos))
-                            ;; if no valid cell, stay in current cell
-                            (let* ((current-cell (cltpt/org-mode::get-cell-at-coordinates
-                                                  new-table-match
-                                                  current-coords))
-                                   (pos (if current-cell
-                                            (+ table-start-pos
-                                               (cltpt/combinator:match-begin-absolute current-cell)
-                                               1)
-                                            table-start-pos)))
-                              (values new-table-str pos)))
-                      (organ/utils:replace-submatch-text*
-                       (lem:current-buffer)
-                       match
-                       final-string-to-insert)
-                      (lem:move-point (lem:current-point)
-                                      (organ/utils:char-offset-to-point
-                                       (lem:current-buffer)
-                                       final-cursor-pos)))))))))))
+                                   table-start-pos)))
+              (organ/utils:replace-submatch-text* (lem:current-buffer) match final-table-str)
+              (lem:move-point (lem:current-point)
+                              (organ/utils:char-offset-to-point
+                               (lem:current-buffer) cursor-pos))))))))
 
 ;; detect tab and dispatch
 (defmethod lem:execute :around ((mode *organ-mode*) command argument)
