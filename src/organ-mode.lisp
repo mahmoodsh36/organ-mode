@@ -233,31 +233,35 @@ for :backward, finds the object starting closest before POS."
 
 (defmethod org-table-move ((text-obj cltpt/org-mode:org-table) x-shift y-shift)
   (let* ((match (cltpt/base:text-object-match text-obj))
+         (table-str (cltpt/base:text-object-match-text text-obj match))
          (initial-pos (organ/utils:current-pos))
-         (table-start-pos (cltpt/combinator:match-begin match))
+         (table-start-pos (cltpt/combinator:match-begin-absolute match))
          (cell (cltpt/tree:tree-find-if
                 match
                 (lambda (submatch)
-                  (and (>= (1+ initial-pos) (cltpt/combinator:match-begin submatch))
-                       (<= initial-pos (cltpt/combinator:match-end submatch))
+                  (and (>= (1+ initial-pos) (cltpt/combinator:match-begin-absolute submatch))
+                       (<= initial-pos (cltpt/combinator:match-end-absolute submatch))
                        (string= (cltpt/combinator:match-id submatch) 'table-cell)))))
          (effective-cell (or cell
-                             ;; find the nearest cell if no cell found at point
-                             (cltpt/tree:tree-find-if
-                              match
-                              (lambda (submatch)
-                                (and (>= (1+ initial-pos)
-                                         (cltpt/combinator:match-begin submatch))
-                                     (string= (cltpt/combinator:match-id submatch)
-                                              'table-cell)))))))
+                             ;; find the nearest cell before the cursor
+                             (let ((best))
+                               (cltpt/tree:tree-walk
+                                match
+                                (lambda (submatch)
+                                  (when (and (>= (1+ initial-pos)
+                                                 (cltpt/combinator:match-begin-absolute submatch))
+                                             (string= (cltpt/combinator:match-id submatch)
+                                                      'table-cell))
+                                    (setf best submatch))))
+                               best))))
     (if (not effective-cell)
         ;; if no cell found anywhere, just reformat and don't move the cursor.
-        (let ((new-table-str (cltpt/org-mode::reformat-table match)))
+        (let ((new-table-str (cltpt/org-mode::reformat-table table-str match)))
           (organ/utils:replace-submatch-text* (lem:current-buffer) match new-table-str))
         (let* ((current-coords (cltpt/org-mode::get-cell-coordinates effective-cell))
-               (new-table-str (cltpt/org-mode::reformat-table match)))
+               (new-table-str (cltpt/org-mode::reformat-table table-str match)))
           (multiple-value-bind (new-table-match new-pos-ignored)
-              (cltpt/org-mode::org-table-matcher nil new-table-str 0)
+              (cltpt/org-mode::org-table-matcher nil (cltpt/reader:reader-from-string new-table-str) 0)
             (let* ((width (cltpt/org-mode::get-table-width new-table-match))
                    (height (cltpt/org-mode::get-table-height new-table-match))
                    (current-x (car current-coords))
@@ -265,7 +269,10 @@ for :backward, finds the object starting closest before POS."
                    ;; convert current position to linear
                    (current-linear (+ (* current-y width) current-x))
                    ;; convert shift to linear offset: x-shift is columns, y-shift is rows
-                   (shift-linear (+ x-shift (* y-shift width)))
+                   ;; when cursor was on a non-cell (e.g. hrule), the fallback already
+                   ;; jumped backward to the nearest cell, so neutralize backward shift
+                   (raw-shift (+ x-shift (* y-shift width)))
+                   (shift-linear (if (and (null cell) (< raw-shift 0)) 0 raw-shift))
                    ;; calculate target position
                    (target-linear (+ current-linear shift-linear))
                    ;; convert back to 2d coordinates
@@ -279,7 +286,7 @@ for :backward, finds the object starting closest before POS."
               (if (>= new-y height)
                   (let* ((rows-to-add (- new-y (1- height)))
                          (table-data
-                           (cltpt/org-mode::table-match-to-nested-list new-table-match))
+                           (cltpt/org-mode::table-match-to-nested-list new-table-str new-table-match))
                          ;; add empty rows
                          (extended-table-data
                            (append table-data
@@ -294,14 +301,14 @@ for :backward, finds the object starting closest before POS."
                      final-table-str)
                     ;; recalculate the table structure to get correct positions
                     (multiple-value-bind (updated-table-match updated-pos)
-                        (cltpt/org-mode::org-table-matcher nil final-table-str 0)
+                        (cltpt/org-mode::org-table-matcher nil (cltpt/reader:reader-from-string final-table-str) 0)
                       (let* ((target-cell (cltpt/org-mode::get-cell-at-coordinates
                                            updated-table-match
                                            target-coords))
                              (final-cursor-pos
                                (if target-cell
                                    (+ table-start-pos
-                                      (cltpt/combinator:match-begin target-cell)
+                                      (cltpt/combinator:match-begin-absolute target-cell)
                                       1)
                                    (+ table-start-pos
                                       (length final-table-str)))))
@@ -317,7 +324,7 @@ for :backward, finds the object starting closest before POS."
                     (multiple-value-bind (final-string-to-insert final-cursor-pos)
                         (if target-cell
                             (let ((pos (+ table-start-pos
-                                          (cltpt/combinator:match-begin target-cell)
+                                          (cltpt/combinator:match-begin-absolute target-cell)
                                           1)))
                               (values new-table-str pos))
                             ;; if no valid cell, stay in current cell
@@ -326,7 +333,7 @@ for :backward, finds the object starting closest before POS."
                                                   current-coords))
                                    (pos (if current-cell
                                             (+ table-start-pos
-                                               (cltpt/combinator:match-begin current-cell)
+                                               (cltpt/combinator:match-begin-absolute current-cell)
                                                1)
                                             table-start-pos)))
                               (values new-table-str pos)))
