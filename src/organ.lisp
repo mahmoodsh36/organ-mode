@@ -16,14 +16,6 @@
 (defclass lem/transient::timestamp-range (lem/transient::infix)
   ())
 
-(defun end-of-day (ts)
-  "return a timestamp for 23:59:59 on the same day as TS."
-  (local-time:encode-timestamp
-   0 59 59 23
-   (local-time:timestamp-day ts)
-   (local-time:timestamp-month ts)
-   (local-time:timestamp-year ts)))
-
 (defmethod lem:prefix-suffix ((prefix lem/transient::timestamp-range))
   (lambda ()
     (lem:with-last-read-key-sequence

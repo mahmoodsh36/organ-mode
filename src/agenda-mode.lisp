@@ -26,19 +26,25 @@
 (defmethod lem-vi-mode/core:mode-specific-keymaps ((mode agenda-mode))
   (list *agenda-mode-keymap*))
 
+(defun task-record-location (node)
+  "extract the file path and text object from a task-record NODE.
+returns (values filepath text-obj) or nil if NODE is not a task-record."
+  (when (typep node 'cltpt/agenda:task-record)
+    (let* ((task (cltpt/agenda:task-record-task node))
+           (roam-node (cltpt/agenda:task-node task))
+           (filepath (cltpt/roam:node-file roam-node))
+           (text-obj (cltpt/roam:node-text-obj roam-node)))
+      (values filepath text-obj))))
+
 (lem:define-command agenda-mode-follow () ()
   "open the agenda entry at point."
   (let ((node (organ/outline-mode:node-at-point (lem:current-point))))
-    (when (typep node 'cltpt/agenda:task-record)
-      (let* ((rec node)
-             (task (cltpt/agenda:task-record-task node))
-             (roam-node (cltpt/agenda:task-node task))
-             (filepath (cltpt/roam:node-file roam-node))
-             (text-obj (cltpt/roam:node-text-obj roam-node))
-             (pos (cltpt/base:text-object-begin-in-root text-obj))
-             (buffer (lem:find-file-buffer filepath)))
-        (lem:switch-to-buffer buffer)
-        (lem:move-to-position (lem:current-point) pos)))))
+    (multiple-value-bind (filepath text-obj) (task-record-location node)
+      (when filepath
+        (let ((buffer (lem:find-file-buffer filepath)))
+          (lem:switch-to-buffer buffer)
+          (lem:move-to-position (lem:current-point)
+                                (cltpt/base:text-object-begin-in-root text-obj)))))))
 
 (defun agenda-mode-open (agenda &key begin-ts end-ts)
   (let ((buffer (lem:make-buffer "*agenda*")))
@@ -113,17 +119,12 @@
   (let ((header))
     (if (lem:mode-active-p (lem:current-buffer) 'agenda-mode)
         (let ((node (organ/outline-mode:node-at-point (lem:current-point))))
-          (when (typep node 'cltpt/agenda:task-record)
-            (let* ((rec node)
-                   (task (cltpt/agenda:task-record-task node))
-                   (roam-node (cltpt/agenda:task-node task))
-                   (filepath (cltpt/roam:node-file roam-node))
-                   (text-obj (cltpt/roam:node-text-obj roam-node))
-                   (pos (1+ (cltpt/base:text-object-begin-in-root text-obj))))
+          (multiple-value-bind (filepath text-obj) (task-record-location node)
+            (when filepath
               (setf header text-obj)
               (lem:switch-to-buffer (lem:find-file-buffer filepath))
               (lem:move-to-position (lem:current-point)
-                                    pos))))
+                                    (1+ (cltpt/base:text-object-begin-in-root text-obj))))))
         (let ((text-obj (cltpt/base:child-at-pos
                          (organ/organ-mode:current-tree)
                          (organ/utils:current-pos))))

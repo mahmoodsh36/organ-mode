@@ -43,12 +43,12 @@
 (defun overlay-for-submatch (buf obj submatch-id attribute)
   "a function DRYing highilighting of submatches."
   (let* ((match (cltpt/base:text-object-match obj))
-         (submatch (cltpt/combinator:find-submatch match submatch-id))
-         (submatch-begin (cltpt/combinator:match-begin submatch))
-         (submatch-end (cltpt/combinator:match-end submatch)))
+         (submatch (cltpt/combinator:find-submatch match submatch-id)))
     (when submatch
-      (lem:make-overlay (organ/utils:char-offset-to-point buf submatch-begin)
-                        (organ/utils:char-offset-to-point buf submatch-end)
+      (lem:make-overlay (organ/utils:char-offset-to-point
+                         buf (cltpt/combinator:match-begin submatch))
+                        (organ/utils:char-offset-to-point
+                         buf (cltpt/combinator:match-end submatch))
                         attribute))))
 
 ;; like `overlay-for-submatch', except that it acts on all submatches found by id

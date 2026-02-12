@@ -297,17 +297,22 @@ and is called when Return is pressed on a node."
       (compute-node-depth node))))
 
 (defun scan-lines (buffer start-line end-line step predicate)
-  "scan lines in BUFFER from START-LINE to END-LINE with STEP increment.
+  "scan lines in BUFFER from START-LINE toward END-LINE with STEP increment.
+STEP can be positive (forward) or negative (backward).
 
 for each line, call PREDICATE with the node at that line (or NIL).
 when PREDICATE returns non-NIL, return that line number."
-  (loop for line-num from start-line to end-line by (abs step)
-        for temp-point = (lem:copy-point (lem:buffer-point buffer) :temporary)
-        when (and (lem:move-to-line temp-point line-num)
-                  (lem:move-to-column temp-point 1))
-          do (let ((node (lem:text-property-at temp-point :outline-node)))
-               (when (funcall predicate node)
-                 (return line-num)))))
+  (let ((test (if (plusp step)
+                  #'<=
+                  #'>=)))
+    (loop for line-num = start-line then (+ line-num step)
+          while (funcall test line-num end-line)
+          for temp-point = (lem:copy-point (lem:buffer-point buffer) :temporary)
+          when (and (lem:move-to-line temp-point line-num)
+                    (lem:move-to-column temp-point 1))
+            do (let ((node (lem:text-property-at temp-point :outline-node)))
+                 (when (funcall predicate node)
+                   (return line-num))))))
 
 (defun scan-lines-forward (buffer start-line predicate)
   "scan lines forward from START-LINE."
@@ -315,13 +320,7 @@ when PREDICATE returns non-NIL, return that line number."
 
 (defun scan-lines-backward (buffer start-line predicate)
   "scan lines backward from START-LINE."
-  (loop for line-num from start-line downto 1
-        for temp-point = (lem:copy-point (lem:buffer-point buffer) :temporary)
-        when (and (lem:move-to-line temp-point line-num)
-                  (lem:move-to-column temp-point 1))
-          do (let ((node (lem:text-property-at temp-point :outline-node)))
-               (when (funcall predicate node)
-                 (return line-num)))))
+  (scan-lines buffer start-line 1 -1 predicate))
 
 (defun move-point-to-line (point line-num)
   "move POINT to LINE-NUM column 1."

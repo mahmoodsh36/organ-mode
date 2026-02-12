@@ -2,6 +2,7 @@
   (:use :cl)
   (:export
    :char-offset-to-point :current-pos :replace-text-between-positions
+   :*weekday-names*
    :format-timestamp :replace-submatch-text :replace-submatch-text*))
 
 (in-package :organ/utils)
@@ -55,6 +56,10 @@
      submatch
      new-text)))
 
+(defparameter *weekday-names*
+  '("Sun" "Mon" "Tue" "Wed" "Thu" "Fri" "Sat")
+  "short weekday names indexed by day-of-week (0=Sunday).")
+
 (defun format-timestamp (&optional (timestamp (local-time:now)))
   "return a string like <2024-01-30 Tue> for the given TIMESTAMP."
   (let* ((base (local-time:format-timestring
@@ -62,5 +67,5 @@
                 timestamp
                 :format '(:year "-" (:month 2) "-" (:day 2))))
          (weekday (nth (local-time:timestamp-day-of-week timestamp)
-                       '("Sun" "Mon" "Tue" "Wed" "Thu" "Fri" "Sat"))))
+                       *weekday-names*)))
     (format nil "<~A ~A>" base weekday)))

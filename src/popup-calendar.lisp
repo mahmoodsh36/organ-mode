@@ -8,7 +8,6 @@
 (define-editor-variable popup-calendar-callback nil)
 (define-editor-variable popup-calendar-source-buffer nil)
 (define-editor-variable popup-calendar-window nil)
-(define-editor-variable popup-calendar-date nil)
 
 ;; these variables are not buffer-isolated but the intended workflow
 ;; doenst require that anyway.
@@ -25,13 +24,16 @@
 (defvar *popup-window-height* 8)
 
 (defparameter *weekday-name-map*
-  '(("sun" . 0)
-    ("mon" . 1)
-    ("tue" . 2)
-    ("wed" . 3)
-    ("thu" . 4)
-    ("fri" . 5)
-    ("sat" . 6)))
+  (loop for name in organ/utils:*weekday-names*
+        for i from 0
+        collect (cons (string-downcase name) i)))
+
+(defconstant +max-hour+ 23)
+(defconstant +max-minute+ 59)
+(defconstant +max-day+ 31)
+(defconstant +months-per-year+ 12)
+(defconstant +min-year+ 1900)
+(defconstant +weekday-prefix-length+ 3)
 
 (defun parse-time-part (time-string)
   "parse time string like '10:00'. returns (values hour minute) or nil."
@@ -42,7 +44,7 @@
                (min-str (subseq time-string (1+ colon-pos)))
                (hour (parse-integer hour-str :junk-allowed t))
                (minute (parse-integer min-str :junk-allowed t)))
-          (when (and hour minute (<= 0 hour 23) (<= 0 minute 59))
+          (when (and hour minute (<= 0 hour +max-hour+) (<= 0 minute +max-minute+))
             (values hour minute)))))))
 
 (defun parse-relative-date (date-part)
@@ -64,16 +66,16 @@
 
 (defun parse-weekday-name (date-part)
   "parse weekday name like 'sat', 'monday'. returns next occurrence timestamp or nil."
-  (when (and (>= (length date-part) 3)
+  (when (and (>= (length date-part) +weekday-prefix-length+)
              (every #'alpha-char-p date-part))
     (let* ((day-name (string-downcase date-part))
-           (prefix (subseq day-name 0 3))
+           (prefix (subseq day-name 0 +weekday-prefix-length+))
            (entry (assoc prefix *weekday-name-map* :test #'string-equal))
            (target-dow (cdr entry)))
       (when target-dow
         (let* ((now (local-time:now))
                (current-dow (local-time:timestamp-day-of-week now))
-               (days-ahead (mod (- target-dow current-dow) 7)))
+               (days-ahead (mod (- target-dow current-dow) organ/calendar-mode:+days-per-week+)))
           (when (zerop days-ahead) (setf days-ahead 7))
           (local-time:timestamp+ now days-ahead :day))))))
 
@@ -85,7 +87,7 @@
            (current-month (local-time:timestamp-month now))
            (current-year (local-time:timestamp-year now))
            (days-in-month (local-time:days-in-month current-month current-year)))
-      (when (and day (<= 1 day 31))
+      (when (and day (<= 1 day +max-day+))
         (let ((try-date (ignore-errors
                          (local-time:encode-timestamp 0 0 0 0 day current-month current-year))))
           (cond
@@ -93,8 +95,8 @@
              try-date)
             (t
              ;; try next month
-             (let* ((next-month (if (= current-month 12) 1 (1+ current-month)))
-                    (next-year (if (= current-month 12) (1+ current-year) current-year))
+             (let* ((next-month (if (= current-month +months-per-year+) 1 (1+ current-month)))
+                    (next-year (if (= current-month +months-per-year+) (1+ current-year) current-year))
                     (next-days (local-time:days-in-month next-month next-year)))
                (when (<= day next-days)
                  (local-time:encode-timestamp 0 0 0 0 day next-month next-year))))))))))
@@ -107,9 +109,9 @@
            (month (parse-integer (second parts) :junk-allowed t))
            (year (when (>= (length parts) 3)
                    (parse-integer (third parts) :junk-allowed t))))
-      (when (and day month (<= 1 day 31) (<= 1 month 12))
+      (when (and day month (<= 1 day +max-day+) (<= 1 month +months-per-year+))
         (let ((final-year (or year (local-time:timestamp-year (local-time:now)))))
-          (when (>= final-year 1900)
+          (when (>= final-year +min-year+)
             (local-time:encode-timestamp 0 0 0 0 day month final-year)))))))
 
 (defun parse-date-time-input (input-string)

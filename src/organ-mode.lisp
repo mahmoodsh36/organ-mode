@@ -78,129 +78,83 @@ reformat the table and the cursor will remain in the last cell.")
   (lem:buffer-value (lem:current-buffer) 'cltpt-tree))
 
 ;; TODO: why are we accepting a text-object if we are using position-in-root anyway?
-(defmethod object-closest-after-pos ((tree cltpt/base:text-object)
-                                     pos
-                                     &optional (predicate #'cltpt/base:tautology))
-  "finds the text object starting closest to but after POS using an efficient."
-  ;; if the entire object ends before our position, it and all its children are irrelevant. we can
-  ;; prune this entire branch.
-  (when (<= (cltpt/base:text-object-end-in-root tree) pos)
-    (return-from object-closest-after-pos nil))
-  (let ((best-candidate))
-    ;; the current object itself is a potential candidate. if it starts after the cursor,
-    ;; it's our current best guess.
-    (when (and (> (cltpt/base:text-object-begin-in-root tree) pos)
-               (funcall predicate tree))
-      (setf best-candidate tree))
-    ;; search the children to see if one of them contains a better candidate. a "better" candidate
-    ;; is one that also starts after `pos` but is closer (has a smaller start position).
-    (loop for child in (cltpt/base:text-object-children tree)
-          do (let ((candidate-from-child (object-closest-after-pos child pos predicate)))
-               (when candidate-from-child
-                 (if (or (null best-candidate)
-                         (< (cltpt/base:text-object-begin-in-root candidate-from-child)
-                            (cltpt/base:text-object-begin-in-root best-candidate)))
-                     ;; no need to check predicate here because its guaranteed to have done
-                     ;; by the recursive call to the child.
-                     (setf best-candidate candidate-from-child)))))
-    best-candidate))
+(defmethod object-closest-to-pos ((tree cltpt/base:text-object)
+                                  pos
+                                  direction
+                                  &optional (predicate #'cltpt/base:tautology))
+  "finds the text object closest to POS in DIRECTION (:forward or :backward).
+for :forward, finds the object starting closest after POS.
+for :backward, finds the object starting closest before POS."
+  (let ((prune-test (ecase direction
+                      (:forward #'<=)
+                      (:backward #'>=)))
+        (candidate-test (ecase direction
+                          (:forward #'>)
+                          (:backward #'<)))
+        (better-test (ecase direction
+                       (:forward #'<)
+                       (:backward #'>)))
+        (prune-accessor (ecase direction
+                          (:forward #'cltpt/base:text-object-end-in-root)
+                          (:backward #'cltpt/base:text-object-begin-in-root))))
+    ;; prune: if the entire object is on the wrong side of pos, skip this branch.
+    (when (funcall prune-test (funcall prune-accessor tree) pos)
+      (return-from object-closest-to-pos nil))
+    (let ((best-candidate))
+      (when (and (funcall candidate-test (cltpt/base:text-object-begin-in-root tree) pos)
+                 (funcall predicate tree))
+        (setf best-candidate tree))
+      (loop for child in (cltpt/base:text-object-children tree)
+            do (let ((candidate (object-closest-to-pos child pos direction predicate)))
+                 (when candidate
+                   (if (or (null best-candidate)
+                           (funcall better-test
+                                    (cltpt/base:text-object-begin-in-root candidate)
+                                    (cltpt/base:text-object-begin-in-root best-candidate)))
+                       (setf best-candidate candidate)))))
+      best-candidate)))
 
-(defmethod object-closest-before-pos ((tree cltpt/base:text-object)
-                                       pos
-                                       &optional (predicate #'cltpt/base:tautology))
-  "finds the text object ending closest to but before POS using an efficient search."
-  (when (>= (cltpt/base:text-object-begin-in-root tree) pos)
-    (return-from object-closest-before-pos nil))
-  (let ((best-candidate))
-    (when (and (< (cltpt/base:text-object-begin-in-root tree) pos)
-               (funcall predicate tree))
-      (setf best-candidate tree))
-    (loop for child in (cltpt/base:text-object-children tree)
-          do (let ((candidate-from-child (object-closest-before-pos child pos predicate)))
-               (when candidate-from-child
-                 (if (or (null best-candidate)
-                         (> (cltpt/base:text-object-begin-in-root candidate-from-child)
-                            (cltpt/base:text-object-begin-in-root best-candidate)))
-                     (setf best-candidate candidate-from-child)))))
-    best-candidate))
+(defun organ-move-to-element (direction &optional (predicate #'cltpt/base:tautology))
+  "move point to the nearest element in DIRECTION (:forward or :backward) that satisfies PREDICATE."
+  (let* ((tr (current-tree))
+         (pos (1- (lem:position-at-point (lem:current-point))))
+         (target (object-closest-to-pos tr pos direction predicate))
+         (new-pos (when target (cltpt/base:text-object-begin-in-root target))))
+    (when new-pos
+      (lem:move-point (lem:current-point)
+                      (organ/utils:char-offset-to-point
+                       (lem:current-buffer)
+                       new-pos)))))
 
 (lem:define-command organ-next-element () ()
-  (let* ((tr (current-tree))
-         (pos (1- (lem:position-at-point (lem:current-point))))
-         (next (object-closest-after-pos tr pos))
-         (new-pos (when next (cltpt/base:text-object-begin-in-root next))))
-    (when new-pos
-      (lem:move-point (lem:current-point)
-                      (organ/utils:char-offset-to-point
-                       (lem:current-buffer)
-                       new-pos)))))
+  (organ-move-to-element :forward))
 
 (lem:define-command organ-prev-element () ()
-  (let* ((tr (current-tree))
-         (pos (1- (lem:position-at-point (lem:current-point))))
-         (prev (object-closest-before-pos tr pos))
-         (new-pos (when prev (cltpt/base:text-object-begin-in-root prev))))
-    (when new-pos
-      (lem:move-point (lem:current-point)
-                      (organ/utils:char-offset-to-point
-                       (lem:current-buffer)
-                       new-pos)))))
-
-(defun organ-next-element-of-type (type)
-  (let* ((tr (current-tree))
-         (pos (1- (lem:position-at-point (lem:current-point))))
-         (next (object-closest-after-pos
-                tr
-                pos
-                (lambda (obj)
-                  (typep obj type))))
-         (new-pos (when next
-                    (cltpt/base:text-object-begin-in-root next))))
-    (when new-pos
-      (lem:move-point (lem:current-point)
-                      (organ/utils:char-offset-to-point
-                       (lem:current-buffer)
-                       new-pos)))))
-
-(defun organ-prev-element-of-type (type)
-  (let* ((tr (current-tree))
-         (pos (1- (lem:position-at-point (lem:current-point))))
-         (prev (object-closest-before-pos
-                tr
-                pos
-                (lambda (obj)
-                  (typep obj type))))
-         (new-pos (when prev
-                    (cltpt/base:text-object-begin-in-root prev))))
-    (when new-pos
-      (lem:move-point (lem:current-point)
-                      (organ/utils:char-offset-to-point
-                       (lem:current-buffer)
-                       new-pos)))))
+  (organ-move-to-element :backward))
 
 (lem:define-command organ-next-header () ()
-  (organ-next-element-of-type 'cltpt/org-mode:org-header))
+  (organ-move-to-element :forward (lambda (obj) (typep obj 'cltpt/org-mode:org-header))))
 
 (lem:define-command organ-prev-header () ()
-  (organ-prev-element-of-type 'cltpt/org-mode:org-header))
+  (organ-move-to-element :backward (lambda (obj) (typep obj 'cltpt/org-mode:org-header))))
 
 (lem:define-command organ-next-link () ()
-  (organ-next-element-of-type 'cltpt/org-mode:org-link))
+  (organ-move-to-element :forward (lambda (obj) (typep obj 'cltpt/org-mode:org-link))))
 
 (lem:define-command organ-prev-link () ()
-  (organ-prev-element-of-type 'cltpt/org-mode:org-link))
+  (organ-move-to-element :backward (lambda (obj) (typep obj 'cltpt/org-mode:org-link))))
 
 (lem:define-command organ-next-src-block () ()
-  (organ-next-element-of-type 'cltpt/org-mode:org-src-block))
+  (organ-move-to-element :forward (lambda (obj) (typep obj 'cltpt/org-mode:org-src-block))))
 
 (lem:define-command organ-prev-src-block () ()
-  (organ-prev-element-of-type 'cltpt/org-mode:org-src-block))
+  (organ-move-to-element :backward (lambda (obj) (typep obj 'cltpt/org-mode:org-src-block))))
 
 (lem:define-command organ-next-block () ()
-  (organ-next-element-of-type 'cltpt/org-mode:org-block))
+  (organ-move-to-element :forward (lambda (obj) (typep obj 'cltpt/org-mode:org-block))))
 
 (lem:define-command organ-prev-block () ()
-  (organ-prev-element-of-type 'cltpt/org-mode:org-block))
+  (organ-move-to-element :backward (lambda (obj) (typep obj 'cltpt/org-mode:org-block))))
 
 ;; this used calendar-mode.lisp directly instead of the popup
 ;; (lem:define-command edit-timestamp () ()

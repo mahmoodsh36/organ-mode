@@ -11,6 +11,7 @@
    :calendar-grid-height
    :calendar-marked-dates
    :calendar-date
+   :+days-per-week+
    :popup-calendar-with-callback))
 
 (in-package :organ/calendar-mode)
@@ -30,7 +31,7 @@
 (defparameter *weekday-header* "  Su  Mo  Tu  We  Th  Fr  Sa")
 (defparameter *calendar-column-width* 28)
 (defparameter *calendar-day-cell-width* 4)
-(defparameter *days-in-week* 7)
+(defparameter +days-per-week+ 7)
 (defparameter *date-search-range* 10)
 (defparameter *cross-month-search-lines* 8)
 (defparameter *calendar-date-display-format* '(:long-month " " (:day 2) ", " (:year 4)))
@@ -150,8 +151,8 @@ if nil, navigation finds nearest date in same month first.")
                         collect (let ((week (subseq
                                              grid-cells
                                              0
-                                             (min *days-in-week* (length grid-cells)))))
-                                  (setf grid-cells (nthcdr *days-in-week* grid-cells))
+                                             (min +days-per-week+ (length grid-cells)))))
+                                  (setf grid-cells (nthcdr +days-per-week+ grid-cells))
                                   week))))
       (coerce
        (cons
@@ -636,7 +637,7 @@ INITIAL-DATE can be a timestamp or nil for today."
 
 (define-command open-calendar-next-week () ()
   "open a calendar view starting at next week."
-  (calendar-at-date (local-time:timestamp+ (local-time:now) *days-in-week* :day)))
+  (calendar-at-date (local-time:timestamp+ (local-time:now) +days-per-week+ :day)))
 
 (define-command calendar-next-month () ()
   (navigate-calendar 1 :month))
