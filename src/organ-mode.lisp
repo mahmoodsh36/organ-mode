@@ -81,7 +81,7 @@ reformat the table and the cursor will remain in the last cell.")
 (defmethod object-closest-to-pos ((tree cltpt/base:text-object)
                                   pos
                                   direction
-                                  &optional (predicate #'cltpt/base:tautology))
+                                  &optional (predicate (lambda (&rest args) t)))
   "finds the text object closest to POS in DIRECTION (:forward or :backward).
 for :forward, finds the object starting closest after POS.
 for :backward, finds the object starting closest before POS."
@@ -114,7 +114,7 @@ for :backward, finds the object starting closest before POS."
                        (setf best-candidate candidate)))))
       best-candidate)))
 
-(defun organ-move-to-element (direction &optional (predicate #'cltpt/base:tautology))
+(defun organ-move-to-element (direction &optional (predicate (lambda (&rest args) t)))
   "move point to the nearest element in DIRECTION (:forward or :backward) that satisfies PREDICATE."
   (let* ((tr (current-tree))
          (pos (1- (lem:position-at-point (lem:current-point))))
