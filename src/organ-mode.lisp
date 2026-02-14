@@ -379,8 +379,14 @@ for :backward, finds the object starting closest before POS."
     (lem:pop-to-buffer buffer)))
 
 (defun convert-to-file (dest-format)
-  (let* ((temp-file (cltpt/file-utils:temp-file))
+  (let* ((extension (cond ((eq dest-format cltpt:*html*) "html")
+                          ((eq dest-format cltpt:*latex*) "tex")
+                          (t "txt")))
+         (temp-file (cltpt/file-utils:temp-file "organ-export" extension))
          (buffer (lem:find-file-buffer temp-file))
          (out (convert-buffer dest-format)))
     (cltpt/file-utils:write-file temp-file out)
+    ;; make buffer re-read the stuff we wrote
+    (lem:with-current-buffer buffer
+      (lem-core/commands/file:revert-buffer t))
     (lem:pop-to-buffer buffer)))
