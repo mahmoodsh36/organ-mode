@@ -1,5 +1,5 @@
 (defpackage :organ/organ-mode
-  (:use :cl)
+  (:use :cl :lem/transient)
   (:export :organ-mode :current-tree))
 
 (in-package :organ/organ-mode)
@@ -17,15 +17,52 @@
 (defvar *organ-mode-keymap*
   (lem:make-keymap :description '*organ-mode-keymap*))
 
-(lem:define-keys *organ-mode-keymap*
-  ("C-c n" 'organ-next-element)
-  ("C-c p" 'organ-prev-element)
-  ("C-c C-n" 'organ-next-header)
-  ("C-c C-p" 'organ-prev-header)
-  ("C-c C-x C-n" 'organ-next-link)
-  ("C-c C-x C-p" 'organ-prev-link)
-  ("C-c C-v C-n" 'organ-next-src-block)
-  ("C-c C-v C-p" 'organ-prev-src-block))
+(define-transient *organ-mode-export-keymap*
+  :display-style :row
+  :description "organ-mode export keymap"
+  (:key "d" :type :choice :description "output directory")
+  (:key "l"
+   :description "latex export dispatch"
+   :suffix (:keymap
+            :display-style :column
+            :description "organ-mode latex export"
+            (:key "l"
+             :suffix (lambda ()
+                       (convert-to-file cltpt:*latex*))
+             :description "export to latex file")
+            (:key "L"
+             :suffix (lambda ()
+                       (convert-to-buffer cltpt:*latex*))
+             :description "export to latex buffer")
+            (:key "p" :suffix 'test :description "export to pdf")
+            (:key "o" :suffix 'test :description "export to latex file, convert to pdf, open the pdf.")))
+  (:key "h"
+   :description "html export dispatch"
+   :suffix (:keymap
+            :display-style :column
+            :description "organ-mode html export"
+            (:key "h"
+             :suffix (lambda ()
+                       (convert-to-file cltpt:*html*))
+             :description "export to html file")
+            (:key "H"
+             :suffix (lambda ()
+                       (convert-to-buffer cltpt:*html*))
+             :description "export to html buffer")
+            (:key "o" :suffix 'test :description "export to html file, open it."))))
+
+(define-transient *organ-mode-keymap*
+  :display-style :row
+  :description "organ-mode keymap"
+  (:key "C-c n" :suffix 'organ-next-element)
+  (:key "C-c p" :suffix 'organ-prev-element)
+  (:key "C-c C-n" :suffix 'organ-next-header)
+  (:key "C-c C-p" :suffix 'organ-prev-header)
+  (:key "C-c C-x C-n" :suffix 'organ-next-link)
+  (:key "C-c C-x C-p" :suffix 'organ-prev-link)
+  (:key "C-c C-v C-n" :suffix 'organ-next-src-block)
+  (:key "C-c C-v C-p" :suffix 'organ-prev-src-block)
+  (:key "C-c C-e" :suffix *organ-mode-export-keymap* :description "export dispatch"))
 
 (defvar *organ-mode-hook*
   '((organ-mode-init-all . 0)))
@@ -36,10 +73,15 @@
    :mode-hook *organ-mode-hook*)
   (setf (lem:variable-value 'lem:enable-syntax-highlight) t))
 
+(lem:define-file-type ("org") *organ-mode*)
+
+(defmethod lem/transient:mode-transient-keymap ((mode *organ-mode*))
+  *organ-mode-keymap*)
+
 (defvar *org-table-add-row-on-tab* t
-  "when non-nil, pressing Tab in the last cell of an org-table will
-reformat the table and add a new empty row. When nil, it will only
-reformat the table and the cursor will remain in the last cell.")
+  "whether pressing tab in the last cell of an org-table will reformat the table and add a new empty row.
+
+when nil, it will only reformat the table and the cursor will remain in the last cell.")
 
 (defun organ-mode-init-all ()
   "called when organ-mode is started, adds modification hooks to reparse buffer."
@@ -324,4 +366,21 @@ for :backward, finds the object starting closest before POS."
           (t (call-next-method)))
         (call-next-method))))
 
-(lem:define-file-type ("org") *organ-mode*)
+(defun convert-buffer (dest-format)
+  (let* ((tree (current-tree))
+         (output (cltpt:convert-document cltpt/org-mode:*org-mode* dest-format tree)))
+    output))
+
+(defun convert-to-buffer (dest-format)
+  (let ((buffer (lem:make-buffer "*organ-mode-out*"))
+        (out (convert-buffer dest-format)))
+    (lem:with-current-buffer buffer
+      (lem:insert-string (lem:buffer-start-point buffer) out))
+    (lem:pop-to-buffer buffer)))
+
+(defun convert-to-file (dest-format)
+  (let* ((temp-file (cltpt/file-utils:temp-file))
+         (buffer (lem:find-file-buffer temp-file))
+         (out (convert-buffer dest-format)))
+    (cltpt/file-utils:write-file temp-file out)
+    (lem:pop-to-buffer buffer)))

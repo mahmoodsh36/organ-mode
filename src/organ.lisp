@@ -32,10 +32,10 @@
                      :begin begin-ts
                      :end end-ts))))))))
 
-(defmethod lem/transient::prefix-render ((prefix lem/transient::timestamp-range)
-                                         &optional matched-depth)
+(defmethod lem/transient:prefix-render ((prefix lem/transient::timestamp-range)
+                                        &optional matched-depth)
   (let* ((key-str (lem/transient::prefix-effective-display-key prefix))
-         (range (lem/transient::prefix-value prefix))
+         (range (lem/transient:prefix-value prefix))
          (desc (lem/transient::get-description prefix))
          (value-str (cond
                       ((null range) "none")
@@ -48,13 +48,13 @@
                       (t (format nil "~A --"
                                  (organ/utils:format-timestamp
                                   (cltpt/agenda:time-range-begin range)))))))
-    (lem/transient::make-layout-item
-     :key (lem/transient::make-key-with-highlight key-str matched-depth)
+    (lem/transient:make-layout-item
+     :key (lem/transient:make-key-with-highlight key-str matched-depth)
      :description (list (cons desc nil)
                         (cons " " nil)
-                        (cons "[" 'lem/transient::transient-bracket-attribute)
-                        (cons value-str 'lem/transient::transient-value-attribute)
-                        (cons "]" 'lem/transient::transient-bracket-attribute)))))
+                        (cons "[" 'lem/transient:transient-bracket-attribute)
+                        (cons value-str 'lem/transient:transient-value-attribute)
+                        (cons "]" 'lem/transient:transient-bracket-attribute)))))
 
 (define-transient *organ-keymap*
   :display-style :row
@@ -65,37 +65,37 @@
     :display-style :column
     (:keymap
      :description "agenda actions"
-     (:key "a" :suffix agenda-open :description "open agenda"))
+     (:key "a" :suffix 'agenda-open :description "open agenda"))
     (:keymap
      :description "agenda options"
      (:key "d"
-      :type toggle
+      :type 'toggle
       :description "display DONE tasks"
-      :variable cltpt:*agenda-include-done*)
+      :variable 'cltpt:*agenda-include-done*)
      (:key "R"
-      :type timestamp-range
+      :type 'timestamp-range
       :description "timestamp range"
-      :variable *agenda-timestamp-range*)))
+      :variable '*agenda-timestamp-range*)))
    (:keymap
     :display-style :column
     (:keymap
      :description "roam actions"
-     (:key "r" :suffix roam-find :description "browse nodes")
-     (:key "l" :suffix test :description "list nodes"))
+     (:key "r" :suffix 'roam-find :description "browse nodes")
+     (:key "l" :suffix 'test :description "list nodes"))
     (:keymap
      :description "roam options"
-     (:key "f" :suffix test :description "roam files (not yet implemented)" :active-p nil))))
+     (:key "f" :suffix 'test :description "roam files (not yet implemented)" :active-p nil))))
   (:key "c"
    :description "publish (export-all)"
    :suffix (:keymap
             :display-style :column
-            (:key "o" :suffix test :description "output dir")
-            (:key "i" :suffix test :description "tags to include")
-            (:key "x" :suffix test :description "tags to exclude (undoes inclusion)")
-            (:key "s" :suffix test :description "static file output dir")
-            (:key "S" :suffix test :description "copy static files")
-            (:key "h" :suffix test :description "convert all files to html")
-            (:key "l" :suffix test :description "convert all files to latex"))))
+            (:key "o" :suffix 'test :description "output dir")
+            (:key "i" :suffix 'test :description "tags to include")
+            (:key "x" :suffix 'test :description "tags to exclude (undoes inclusion)")
+            (:key "s" :suffix 'test :description "static file output dir")
+            (:key "S" :suffix 'test :description "copy static files")
+            (:key "h" :suffix 'test :description "convert all files to html")
+            (:key "l" :suffix 'test :description "convert all files to latex"))))
 
 (lem:define-key lem:*global-keymap* "C-c r" *organ-keymap*)
 
