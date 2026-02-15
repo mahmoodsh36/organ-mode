@@ -4,10 +4,6 @@
 
 (in-package :organ/agenda-mode)
 
-(defvar *agenda-mode-keymap*
-  (lem:make-keymap :description '*agenda-mode-keymap*
-                   :base organ/outline-mode:*outline-mode-keymap*))
-
 (lem:define-attribute *agenda-keyword-attribute*
   (t :foreground "blue" :background nil))
 
@@ -17,7 +13,11 @@
 (lem:define-attribute *agenda-state-attribute*
   (t :foreground "purple" :background nil))
 
-(lem:define-key *agenda-mode-keymap* "Return" 'agenda-mode-follow)
+(lem/transient:define-transient *agenda-mode-keymap*
+  :base organ/outline-mode:*outline-mode-keymap*
+  :display-style :row
+  :description "organ-mode keymap"
+  (:key "Return" :suffix 'agenda-mode-follow))
 
 (lem:define-major-mode agenda-mode organ/outline-mode:outline-mode
   (:name "agenda-mode"
@@ -115,7 +115,11 @@ returns (values filepath text-obj) or nil if NODE is not a task-record."
       (lem:put-text-property line-start-pos node-end-pos :clickable click-handler)
       (lem:put-text-property line-start-pos node-end-pos :outline-node node))))
 
-(lem:define-command agenda-mode-change-task-state () ()
+(lem/transient:define-transient *todo-state-keymap*
+  :display-style :row
+  :description "todo-state keymap")
+
+(defun current-header ()
   (let ((header))
     (if (lem:mode-active-p (lem:current-buffer) 'agenda-mode)
         (let ((node (organ/outline-mode:node-at-point (lem:current-point))))
@@ -132,36 +136,49 @@ returns (values filepath text-obj) or nil if NODE is not a task-record."
                 until (typep text-obj 'cltpt/org-mode:org-header)
                 do (setf text-obj (cltpt/base:text-object-parent text-obj)))
           (setf header text-obj)))
-    (when header
-      (let* ((pos (cltpt/base:text-object-begin-in-root header))
-             ;; (match (cltpt/base:text-object-match header))
-             (task (cltpt/agenda:text-object-task header))
-             (state (cltpt/agenda:task-state task))
-             ;; (next-state (cltpt/agenda:cycle state))
-             (state-names
-               (mapcar
-                (lambda (x)
-                  (princ-to-string (cltpt/agenda:state-desc-name x)))
-                (cltpt/agenda:state-sequence-desc-state-descs
-                 (cltpt/agenda:state-sequence-desc state))))
-             (new-state-name
-               (lem:prompt-for-string
-                "state: "
-                :completion-function (lambda (str)
-                                       state-names)))
-             (new-state (when new-state-name
-                          (cltpt/agenda:state-by-name
-                           new-state-name))))
-        (when new-state
-          (lem:message "changed from ~A to ~A"
-                       (cltpt/agenda:state-name state)
-                       (cltpt/agenda:state-name new-state))
-          (organ/utils:replace-submatch-text
-           (lem:current-buffer)
-           header
-           'cltpt/org-mode::todo-keyword
-           ;; we're using princ-to-string since it can be a symbol.. (why tho?)
-           (princ-to-string (cltpt/agenda:state-name new-state))))))))
+    header))
+
+(defmethod lem:keymap-children ((keymap (eql *todo-state-keymap*)))
+  (log:info "got here4321")
+  (let* ((header (current-header))
+         (task (cltpt/agenda:text-object-task header))
+         (state (cltpt/agenda:task-state task))
+         ;; (next-state (cltpt/agenda:cycle state))
+         (state-names
+           (mapcar
+            (lambda (x)
+              (princ-to-string (cltpt/agenda:state-desc-name x)))
+            (cltpt/agenda:state-sequence-desc-state-descs
+             (cltpt/agenda:state-sequence-desc state)))))
+    (loop for state-name in state-names
+          collect (lem:make-prefix
+                   :key (car (parse-keyspec (string-downcase (string (char state-name 0)))))
+                   :suffix state-name))))
+
+(lem:define-command agenda-mode-change-task-state () ()
+  (let ((header (current-header)))
+    (if header
+        (let ((task (cltpt/agenda:text-object-task header)))
+          (if task
+              (let* ((state (cltpt/agenda:task-state task))
+                     (new-state-name
+                       (lem:with-special-keymap (*todo-state-keymap*)
+                         (lem/transient::show-transient *todo-state-keymap*)
+                         (lem:read-command)))
+                     (new-state (when new-state-name
+                                  (cltpt/agenda:state-by-name
+                                   new-state-name))))
+                (when new-state
+                  (lem:message "state changed from ~A to ~A"
+                               (cltpt/agenda:state-name state)
+                               (cltpt/agenda:state-name new-state))
+                  (organ/utils:replace-submatch-text
+                   (lem:current-buffer)
+                   header
+                   'cltpt/org-mode::todo-keyword
+                   (princ-to-string (cltpt/agenda:state-name new-state)))))
+              (lem:message "this header contains no TODO data.")))
+        (lem:message "not under header"))))
 
 (defmethod lem/transient:mode-transient-keymap ((mode agenda-mode))
   *agenda-mode-keymap*)

@@ -44,8 +44,8 @@
 (defun replace-submatch-text* (buffer submatch new-text)
   (replace-text-between-positions
    buffer
-   (1+ (cltpt/combinator:match-begin submatch))
-   (1+ (cltpt/combinator:match-end submatch))
+   (1+ (cltpt/combinator:match-begin-absolute submatch))
+   (1+ (cltpt/combinator:match-end-absolute submatch))
    new-text))
 
 (defun replace-submatch-text (buffer text-obj submatch-id new-text)
