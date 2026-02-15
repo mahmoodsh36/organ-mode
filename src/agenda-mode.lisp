@@ -139,7 +139,6 @@ returns (values filepath text-obj) or nil if NODE is not a task-record."
     header))
 
 (defmethod lem:keymap-children ((keymap (eql *todo-state-keymap*)))
-  (log:info "got here4321")
   (let* ((header (current-header))
          (task (cltpt/agenda:text-object-task header))
          (state (cltpt/agenda:task-state task))

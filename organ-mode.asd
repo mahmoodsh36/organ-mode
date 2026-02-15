@@ -9,16 +9,14 @@
                (:module "outline-mode"
                 :pathname "src/"
                 :components ((:file "outline-mode")))
-               (:module "calendar-mode"
-                :pathname "src/"
-                :components ((:file "calendar-mode")))
-               (:module "popup-calendar"
-                :pathname "src/"
-                :depends-on ("calendar-mode")
-                :components ((:file "popup-calendar")))
+               (:module "calendar"
+                :pathname "src/calendar/"
+                :depends-on ("utils")
+                :components ((:file "calendar-mode")
+                             (:file "popup-calendar")))
                (:module "organ-mode"
-                :pathname "src/"
-                :depends-on ("utils" "calendar-mode")
+                :pathname "src/organ-mode/"
+                :depends-on ("utils" "calendar")
                 :components ((:file "organ-mode")
                              (:file "highlighting")))
                (:module "agenda"
@@ -27,5 +25,5 @@
                 :components ((:file "agenda-mode")))
                (:module "organ"
                 :pathname "src/"
-                :depends-on ("organ-mode" "popup-calendar" "agenda")
+                :depends-on ("organ-mode" "calendar" "agenda")
                 :components ((:file "organ")))))
