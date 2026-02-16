@@ -58,7 +58,7 @@
 (lem:define-key *outline-mode-keymap* "M-u" 'outline-go-to-parent)
 
 ;; this is like cltpt/tree/outline:render-tree but for lem
-(defgeneric interactive-render-node (node buffer point depth click-handler)
+(defgeneric interactive-render-node (node buffer point depth)
   (:documentation "render a node interactively with clickable regions."))
 
 (defgeneric outline-mode-toggle (node)
@@ -106,12 +106,10 @@
 (defmethod cltpt/tree/outline:outline-text ((node outline-node))
   (format nil "~a" (outline-node-value node)))
 
-(defmethod interactive-render-node ((node t) buffer point depth click-handler)
+(defmethod interactive-render-node ((node t) buffer point depth)
   "render a node interactively with clickable regions."
-  (let* ((indent (make-string (* depth 2) :initial-element #\space))
-         (line-start-pos (lem:copy-point point :right-inserting))) ;; mark the start of the line
+  (let* ((indent (make-string (* depth 2) :initial-element #\space)))
     (lem:insert-string point indent)
-    ;; add the tree connector symbol based on whether node has children
     (if (cltpt/tree/outline:could-expand node)
         (lem:insert-string point
                            (if (cltpt/tree/outline:should-expand node)
@@ -119,15 +117,21 @@
                                ;; "▶ "  ;; right arrow for collapsed
                                "- "
                                "+ "))
-        (lem:insert-string point "  ")) ;; indentation for leaf
-    ;; insert the node text
-    (lem:insert-string point
-                       (format nil "~A" (cltpt/tree/outline:outline-text node)))
-    (let ((node-end-pos (lem:copy-point point :left-inserting))) ;; save position before newline
-      (lem:insert-character point #\newline)
-      ;; set properties for the line
-      (lem:put-text-property line-start-pos node-end-pos :clickable click-handler)
-      (lem:put-text-property line-start-pos node-end-pos :outline-node node))))
+        (lem:insert-string point "  "))
+    (let ((content-start-pos (lem:copy-point point :right-inserting)))
+      ;; insert the node text
+      (lem:insert-string point
+                         (format nil "~A" (cltpt/tree/outline:outline-text node)))
+      (let ((node-end-pos (lem:copy-point point :right-inserting)))
+        (lem:insert-character point #\newline)
+        ;; set properties for the content area (excluding indentation)
+        (lem-core::set-clickable
+         content-start-pos
+         node-end-pos
+         (lambda (window clicked-point)
+           (declare (ignore window))
+           (outline-expand-collapse-at-point clicked-point)))
+        (lem:put-text-property content-start-pos node-end-pos :outline-node node)))))
 
 (defmethod outline-mode-toggle ((node outline-node))
   (setf (outline-node-expanded-p node)
@@ -203,14 +207,7 @@ MODE-SETUP is an optional function called when the mode is activated."
 
 (defun render-node (point node depth)
   "render a single node and its children recursively."
-  (interactive-render-node
-   node
-   (lem:current-buffer)
-   point
-   depth
-   (lambda (window clicked-point)
-     (declare (ignore window))
-     (outline-expand-collapse-at-point clicked-point)))
+  (interactive-render-node node (lem:current-buffer) point depth)
   ;; if the node should display children, render its children
   (when (cltpt/tree/outline:should-expand node)
     (dolist (child (cltpt/tree:tree-children node))
