@@ -194,7 +194,8 @@ MODE-SETUP is an optional function called when the mode is activated."
 
 (defun node-at-point (point)
   "find the outline node at the given point in the buffer."
-  (lem:text-property-at point :outline-node))
+  (let ((temp (lem:copy-point point :temporary)))
+    (find-node-on-line temp)))
 
 (defun render-outline (buffer forest)
   "render the outline forest to the buffer."
@@ -223,7 +224,7 @@ MODE-SETUP is an optional function called when the mode is activated."
 (lem:define-command outline-action-at-point () ()
   "perform an action on the node at the current point."
   (let ((point (lem:current-point)))
-    (let ((node (lem:text-property-at point :outline-node)))
+    (let ((node (node-at-point point)))
       (when node
         (let ((action-fn (lem:buffer-value (lem:current-buffer) +outline-action-function+)))
           (when action-fn
@@ -237,7 +238,7 @@ MODE-SETUP is an optional function called when the mode is activated."
   "expand or collapse the node at the given point."
   (let* ((buffer (lem:current-buffer))
          (line-num (lem:line-number-at-point point)))
-    (let ((node (lem:text-property-at point :outline-node)))
+    (let ((node (node-at-point point)))
       (when node
         (outline-mode-toggle node)
         ;; re-render the outline after expanding/collapsing
@@ -289,9 +290,17 @@ and is called when Return is pressed on a node."
 
 (defun get-node-depth (point)
   "get depth by finding the node and computing its depth."
-  (let ((node (lem:text-property-at point :outline-node)))
+  (let ((node (node-at-point point)))
     (when node
       (compute-node-depth node))))
+
+(defun find-node-on-line (point)
+  "find the :outline-node at POINT, scanning forward on the same line if needed."
+  (or (lem:text-property-at point :outline-node)
+      (let ((linum (lem:line-number-at-point point)))
+        (when (lem:next-single-property-change point :outline-node)
+          (when (= linum (lem:line-number-at-point point))
+            (lem:text-property-at point :outline-node))))))
 
 (defun scan-lines (buffer start-line end-line step predicate)
   "scan lines in BUFFER from START-LINE toward END-LINE with STEP increment.
@@ -305,9 +314,8 @@ when PREDICATE returns non-NIL, return that line number."
     (loop for line-num = start-line then (+ line-num step)
           while (funcall test line-num end-line)
           for temp-point = (lem:copy-point (lem:buffer-point buffer) :temporary)
-          when (and (lem:move-to-line temp-point line-num)
-                    (lem:move-to-column temp-point 1))
-            do (let ((node (lem:text-property-at temp-point :outline-node)))
+          when (lem:move-to-line temp-point line-num)
+            do (let ((node (find-node-on-line temp-point)))
                  (when (funcall predicate node)
                    (return line-num))))))
 
@@ -320,10 +328,10 @@ when PREDICATE returns non-NIL, return that line number."
   (scan-lines buffer start-line 1 -1 predicate))
 
 (defun move-point-to-line (point line-num)
-  "move POINT to LINE-NUM column 1."
+  "move POINT to LINE-NUM within the content area."
   (when line-num
     (lem:move-to-line point line-num)
-    (lem:move-to-column point 1)
+    (find-node-on-line point)
     line-num))
 
 (defun find-sibling-node (point direction)
@@ -347,7 +355,7 @@ when PREDICATE returns non-NIL, return that line number."
 
 (defun find-true-sibling-node (point direction)
   "find next or previous true sibling node (same parent)."
-  (let* ((current-node (lem:text-property-at point :outline-node))
+  (let* ((current-node (node-at-point point))
          (current-line (lem:line-number-at-point point))
          (buffer (lem:current-buffer)))
     (when current-node
@@ -419,7 +427,7 @@ when PREDICATE returns non-NIL, return that line number."
 (lem:define-command outline-go-to-parent () ()
   "go to parent of current node."
   (let* ((point (lem:current-point))
-         (current-node (lem:text-property-at point :outline-node))
+         (current-node (node-at-point point))
          (buffer (lem:current-buffer)))
     (when current-node
       (multiple-value-bind (found-node parent depth)

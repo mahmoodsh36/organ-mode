@@ -91,7 +91,10 @@ at or after the current hour. returns a 1-indexed line number."
       (lem:switch-to-buffer buffer)
       (let ((line (find-line-for-current-time forest)))
         (when line
-          (lem:move-to-line (lem:buffer-point buffer) line))))
+          (let ((point (lem:buffer-point buffer)))
+            (lem:move-to-line point line)
+            ;; advance into the content area where :outline-node is set
+            (lem:next-single-property-change point :outline-node)))))
     buffer))
 
 (defmethod organ/outline-mode:interactive-render-node ((node cltpt/agenda:task-record)
@@ -144,12 +147,14 @@ at or after the current hour. returns a 1-indexed line number."
           ;; title
           (lem:insert-string point title)
           ;; right-aligned tags
-          (let* ((tags ":dummy:")
-                 (tag-column 80)
-                 (current-col (lem:point-column point))
-                 (padding (max 1 (- tag-column current-col (length tags)))))
-            (lem:insert-string point (make-string padding :initial-element #\space))
-            (lem:insert-string point tags))
+          (let ((tags (cltpt/agenda:task-tags task1)))
+            (when tags
+              (let* ((tag-str (format nil ":~{~A~^:~}:" tags))
+                     (tag-column 80)
+                     (current-col (lem:point-column point))
+                     (padding (max 1 (- tag-column current-col (length tag-str)))))
+                (lem:insert-string point (make-string padding :initial-element #\space))
+                (lem:insert-string point tag-str))))
           (let ((node-end-pos (lem:copy-point point :temporary)))
             (lem:insert-character point #\newline)
             (lem-core::set-clickable
