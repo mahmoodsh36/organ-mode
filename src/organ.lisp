@@ -1,6 +1,6 @@
 (defpackage :organ
   (:use :cl :lem :lem/transient)
-  (:export :*organ-files* :*agenda-timestamp-range*))
+  (:export :*organ-files* :*agenda-timestamp-range* :*organ-keymap*))
 
 (in-package :organ)
 
@@ -84,25 +84,9 @@
      (:key "l" :suffix 'test :description "list nodes"))
     (:keymap
      :description "roam options"
-     (:key "f" :suffix 'test :description "roam files (not yet implemented)" :active-p nil))))
-  (:key "c"
-   :description "publish (export-all)"
-   :suffix (:keymap
-            :display-style :column
-            (:key "o" :suffix 'test :description "output dir")
-            (:key "i" :suffix 'test :description "tags to include")
-            (:key "x" :suffix 'test :description "tags to exclude (undoes inclusion)")
-            (:key "s" :suffix 'test :description "static file output dir")
-            (:key "S" :suffix 'test :description "copy static files")
-            (:key "h" :suffix 'test :description "convert all files to html")
-            (:key "l" :suffix 'test :description "convert all files to latex"))))
+     (:key "f" :suffix 'test :description "roam files (not yet implemented)" :active-p nil)))))
 
 (lem:define-key lem:*global-keymap* "C-c r" *organ-keymap*)
-
-(defun string-starts-with-p (prefix string)
-  (let ((len (length prefix)))
-    (and (<= len (length string))
-         (string= prefix (subseq string 0 len)))))
 
 (lem:define-command roam-find () ()
   (if *organ-files*
@@ -120,16 +104,7 @@
                       (lem/completion-mode:make-completion-item
                        :label (cltpt/roam:node-title node))))
                 (cltpt/roam:roamer-nodes rmr)))
-             (choice-str (lem:prompt-for-string
-                          "roam-find (node) "
-                          :completion-function
-                          (lambda (str1)
-                            (remove-if-not
-                             (lambda (item)
-                               (string-starts-with-p
-                                str1
-                                (lem/completion-mode:completion-item-label item)))
-                             items))))
+             (choice-str (lem:prompt-for-string "roam-find (node) " :completion-function items))
              ;; this is problematic because it doesnt work well with duplicates
              (choice-idx (position choice-str
                                    items

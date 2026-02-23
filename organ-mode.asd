@@ -26,4 +26,8 @@
                (:module "organ"
                 :pathname "src/"
                 :depends-on ("organ-mode" "calendar" "agenda")
-                :components ((:file "organ")))))
+                :components ((:file "organ")))
+               (:module "publish"
+                :pathname "src/"
+                :depends-on ("organ")
+                :components ((:file "publish")))))
