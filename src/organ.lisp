@@ -104,7 +104,9 @@
                       (lem/completion-mode:make-completion-item
                        :label (cltpt/roam:node-title node))))
                 (cltpt/roam:roamer-nodes rmr)))
-             (choice-str (lem:prompt-for-string "roam-find (node) " :completion-function items))
+             (choice-str (lem:prompt-for-string "roam-find (node) "
+                          :completion-function (lambda (x) (lem:completion-strings x items
+                                                            :key #'lem/completion-mode:completion-item-label))))
              ;; this is problematic because it doesnt work well with duplicates
              (choice-idx (position choice-str
                                    items
