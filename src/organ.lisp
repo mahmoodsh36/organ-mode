@@ -12,6 +12,14 @@
   nil
   "a `cltpt/agenda:time-range' constraining the agenda view, or nil for the default range.")
 
+(defvar *agenda-include-done*
+  nil
+  "when non-nil, include tasks in a terminal (done) state in the agenda view.")
+
+(defvar *agenda-first-repeat-only*
+  nil
+  "when non-nil, show only the first occurrence of each repeating task in the agenda view.")
+
 ;; custom infix type for prompting a timestamp range via two date inputs.
 (defclass lem/transient::timestamp-range (lem/transient::infix)
   ())
@@ -71,7 +79,11 @@
      (:key "d"
       :type 'toggle
       :description "display DONE tasks"
-      :variable 'cltpt:*agenda-include-done*)
+      :variable '*agenda-include-done*)
+     (:key "u"
+      :type 'toggle
+      :description "show only first repeat"
+      :variable '*agenda-first-repeat-only*)
      (:key "R"
       :type 'timestamp-range
       :description "timestamp range"
@@ -125,6 +137,8 @@
         (organ/agenda-mode:agenda-mode-open
          agenda
          :begin-ts (when range (cltpt/agenda:time-range-begin range))
-         :end-ts (when range (cltpt/agenda:time-range-end range)))
+         :end-ts (when range (cltpt/agenda:time-range-end range))
+         :include-done *agenda-include-done*
+         :first-repeat-only *agenda-first-repeat-only*)
         (lem:message "loaded agenda."))
       (lem:message "you must customize *organ-files* first.")))

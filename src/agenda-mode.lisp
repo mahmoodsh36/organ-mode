@@ -78,14 +78,16 @@ at or after the current hour. returns a 1-indexed line number."
         (walk root)))
     last-timed-line))
 
-(defun agenda-mode-open (agenda &key begin-ts end-ts)
+(defun agenda-mode-open (agenda &key begin-ts end-ts include-done first-repeat-only)
   (let ((buffer (lem:make-buffer "*agenda*")))
     (lem:change-buffer-mode buffer 'agenda-mode)
     (setf (lem:buffer-value buffer 'agenda) agenda)
     (let ((forest (cltpt/agenda:build-agenda-forest
                    agenda
                    :begin-ts begin-ts
-                   :end-ts end-ts)))
+                   :end-ts end-ts
+                   :include-done include-done
+                   :first-repeat-only first-repeat-only)))
       (organ/outline-mode:set-outline-forest buffer forest)
       (organ/outline-mode:render-outline buffer forest)
       (lem:switch-to-buffer buffer)
