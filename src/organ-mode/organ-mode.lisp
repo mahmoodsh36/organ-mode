@@ -319,8 +319,8 @@ for :backward, finds the object starting closest before POS."
                    ;; extend table if moving past last row, otherwise reuse
                    (final-table-str
                      (if (>= new-y height)
-                         (cltpt/org-mode:nested-list-to-table-string
-                          (append (cltpt/org-mode:table-match-to-nested-list
+                         (cltpt/org-mode:list-to-table-string
+                          (append (cltpt/org-mode:table-match-to-list
                                    new-table-str
                                    new-table-match)
                                   (loop repeat (- new-y (1- height))
@@ -333,7 +333,9 @@ for :backward, finds the object starting closest before POS."
                           nil (cltpt/reader:reader-from-string final-table-str) 0)))
                    (final-height (cltpt/org-mode:get-table-height final-match))
                    (target-coords (cons new-x (min new-y (1- final-height))))
-                   (target-cell (cltpt/org-mode:get-cell-at-coordinates final-match target-coords))
+                   (target-cell (cltpt/org-mode:get-cell-at-coordinates
+                                 final-match
+                                 target-coords))
                    (cursor-pos (if target-cell
                                    (+ table-start-pos
                                       (cltpt/combinator:match-begin-absolute target-cell)
@@ -341,18 +343,15 @@ for :backward, finds the object starting closest before POS."
                                    table-start-pos)))
               (organ/utils:replace-submatch-text* (lem:current-buffer) match final-table-str)
               (lem:move-point (lem:current-point)
-                              (organ/utils:char-offset-to-point
-                               (lem:current-buffer) cursor-pos))))))))
+                              (organ/utils:char-offset-to-point (lem:current-buffer)
+                                                                cursor-pos))))))))
 
 (defun list-item-info (list-obj)
   "extract bullet info from the parsed tree for the list-item at point. returns (values indent bullet-str prev-bullet-str) or nil."
   (let* ((match (cltpt/base:text-object-match list-obj))
          (buf-text (lem:buffer-text (lem:current-buffer)))
          (pos (organ/utils:current-pos))
-         (items (loop for child in (cltpt/combinator:match-children match)
-                      when (eq (cltpt/combinator:match-id child)
-                               'cltpt/org-mode::list-item)
-                        collect child)))
+         (items (cltpt/combinator:match-children match)))
     (loop for item in items
           for i from 0
           when (and (<= (cltpt/combinator:match-begin-absolute item) pos)
@@ -473,10 +472,51 @@ LIST-OBJ is the org-list text object at point."
         (lem:insert-character pt #\newline)
         (lem:insert-string pt (format nil "~A~A " indent-str new-bullet))))))
 
+(defun org-list-move-item (list-obj direction)
+  "move the list item at point up or down within LIST-OBJ.
+
+DIRECTION is -1 (up) or +1 (down).
+swaps only the content portion, keeping bullets and indentation in place."
+  (let* ((match (cltpt/base:text-object-match list-obj))
+         (buf-text (lem:buffer-text (lem:current-buffer)))
+         (data (cltpt/org-mode:list-match-to-list buf-text match))
+         (indent (or (getf (cltpt/combinator:match-props match) :indent) 0))
+         (items (cltpt/combinator:match-children match))
+         (pos (organ/utils:current-pos))
+         (idx (loop for item in items
+                    for i from 0
+                    when (and (<= (cltpt/combinator:match-begin-absolute item) pos)
+                              (<= pos (cltpt/combinator:match-end-absolute item)))
+                      return i))
+         (target (when idx (+ idx direction))))
+    (when (and data idx target (>= target 0) (< target (length data)))
+      ;; swap content and children, keeping bullets in place
+      (let ((item-a (nth idx data))
+            (item-b (nth target data)))
+        (rotatef (getf item-a :content) (getf item-b :content))
+        (rotatef (getf item-a :children) (getf item-b :children)))
+      ;; convert back to string and replace buffer text
+      (let ((new-str (cltpt/org-mode:list-to-list-string data indent)))
+        (organ/utils:replace-submatch-text* (lem:current-buffer) match new-str)
+        ;; position cursor on the target item
+        (let* ((new-match (cltpt/org-mode:org-list-matcher
+                           nil
+                           (cltpt/reader:reader-from-string new-str)
+                           0))
+               (new-items (cltpt/combinator:match-children new-match))
+               (moved-item (nth target new-items))
+               (list-start (1+ (cltpt/combinator:match-begin-absolute match)))
+               (cursor-pos (when moved-item
+                             (+ list-start
+                                (cltpt/combinator:match-begin-absolute moved-item)))))
+          (when cursor-pos
+            (lem:move-point (lem:current-point)
+                            (organ/utils:char-offset-to-point (lem:current-buffer)
+                                                              cursor-pos))))))))
+
 ;; detect tab/return and dispatch
 (defmethod lem:execute :around ((mode *organ-mode*) command argument)
   (let* ((key-seq (lem:last-read-key-sequence))
-         (first-key (first key-seq))
          (text-obj (current-text-obj))
          (pos (organ/utils:current-pos))
          (table-found (loop for node = text-obj then (cltpt/base:text-object-parent node)
@@ -511,6 +551,13 @@ LIST-OBJ is the org-list text object at point."
             list-found
             (lem:end-line-p (lem:current-point)))
        (organ-list-newline list-found))
+      ;; list item move up/down
+      ((and (equal (lem-core::parse-keyspec "M-k") key-seq)
+            list-found)
+       (org-list-move-item list-found -1))
+      ((and (equal (lem-core::parse-keyspec "M-j") key-seq)
+            list-found)
+       (org-list-move-item list-found 1))
       ;; delegate to default action
       (t (call-next-method)))))
 
