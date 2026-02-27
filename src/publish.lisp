@@ -159,7 +159,7 @@
               :html-static-route *static-route*))
            (lambda (result)
              (lem/loading-spinner:stop-loading-spinner spinner)
-             (lem:message "published to ~A." output-dir)))))))
+             (lem:message "published to ~A" output-dir)))))))
 
 ;; register publish keymap into the global organ keymap.
 (lem/transient:define-transient-key
