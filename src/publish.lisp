@@ -124,7 +124,12 @@
   (let ((files (get-publish-files)))
     (if (null files)
         (lem:message "no files to publish. set publish files (f) or organ:*organ-files* first.")
-        (let* ((output-dir (cltpt/file-utils:ensure-absolute *output-dir*))
+        (let* ((base-dir (uiop:ensure-directory-pathname (lem:buffer-directory)))
+               (resolve (lambda (path)
+                          (cltpt/file-utils:ensure-filepath-string
+                           (uiop:ensure-absolute-pathname path base-dir))))
+               (output-dir (funcall resolve *output-dir*))
+               (static-output-dir (funcall resolve *static-output-dir*))
                (theme-dir (resolve-theme))
                (template-file
                  (when theme-dir
@@ -139,13 +144,13 @@
           (lem:call-background-job
            (lambda ()
              (when theme-dir
-               (copy-theme-static-assets theme-dir *static-output-dir*))
+               (copy-theme-static-assets theme-dir static-output-dir))
              (cltpt/publish:publish
               output-dir
               files
               :include-files *files-to-include*
               :exclude-files *files-to-exclude*
-              :static-output-dir *static-output-dir*
+              :static-output-dir static-output-dir
               :templates templates
               :template-file template-file
               :theme-dir theme-dir
