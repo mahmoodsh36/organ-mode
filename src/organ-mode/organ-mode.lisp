@@ -273,7 +273,7 @@ for :backward, finds the object starting closest before POS."
             (lem:find-file dest-filepath)
             (lem:message "file ~A doesnt exist" dest-filepath))))))
 
-(defmethod org-table-move ((text-obj cltpt/org-mode:org-table) x-shift y-shift)
+(defmethod org-table-navigate ((text-obj cltpt/org-mode:org-table) x-shift y-shift)
   (let* ((match (cltpt/base:text-object-match text-obj))
          (table-str (cltpt/base:text-object-match-text text-obj match))
          (initial-pos (organ/utils:current-pos))
@@ -330,7 +330,9 @@ for :backward, finds the object starting closest before POS."
                      (if (string= final-table-str new-table-str)
                          new-table-match
                          (cltpt/org-mode:org-table-matcher
-                          nil (cltpt/reader:reader-from-string final-table-str) 0)))
+                          nil
+                          (cltpt/reader:reader-from-string final-table-str)
+                          0)))
                    (final-height (cltpt/org-mode:get-table-height final-match))
                    (target-coords (cons new-x (min new-y (1- final-height))))
                    (target-cell (cltpt/org-mode:get-cell-at-coordinates
@@ -370,8 +372,7 @@ for :backward, finds the object starting closest before POS."
                                         prev-item
                                         'cltpt/org-mode::list-item-bullet)))
                    (prev-bullet-str (when prev-bullet-node
-                                      (cltpt/combinator:match-text
-                                       prev-bullet-node buf-text))))
+                                      (cltpt/combinator:match-text prev-bullet-node buf-text))))
               (values indent bullet-str prev-bullet-str)))))
 
 (defun bullet-marker (bullet)
@@ -472,6 +473,151 @@ LIST-OBJ is the org-list text object at point."
         (lem:insert-character pt #\newline)
         (lem:insert-string pt (format nil "~A~A " indent-str new-bullet))))))
 
+(defun org-table-move-row (table-obj direction)
+  "move the table row at point up or down within TABLE-OBJ.
+
+DIRECTION is -1 (up) or +1 (down)."
+  (let* ((match (cltpt/base:text-object-match table-obj))
+         (buf-text (lem:buffer-text (lem:current-buffer)))
+         (table-str (cltpt/combinator:match-text match buf-text))
+         (table-start-pos (cltpt/combinator:match-begin-absolute match))
+         (data (cltpt/org-mode:table-match-to-list table-str match))
+         ;; find which data row the cursor is on
+         (pos (organ/utils:current-pos))
+         (row-nodes (loop for child in (cltpt/combinator:match-children match)
+                          when (eq (cltpt/combinator:match-id child)
+                                   'cltpt/org-mode::table-row)
+                            collect child))
+         (row-idx (loop for row in row-nodes
+                        for i from 0
+                        when (and (<= (cltpt/combinator:match-begin-absolute row) pos)
+                                  (<= pos (cltpt/combinator:match-end-absolute row)))
+                          return i))
+         ;; map row-idx to data index (skipping :hrule entries)
+         (data-indices (loop for item in data
+                             for i from 0
+                             when (listp item)
+                               collect i))
+         (data-idx (when row-idx
+                     (nth row-idx data-indices)))
+         (target-row-idx (when row-idx
+                           (+ row-idx direction)))
+         (target-data-idx (when (and target-row-idx
+                                     (>= target-row-idx 0)
+                                     (< target-row-idx (length data-indices)))
+                            (nth target-row-idx data-indices))))
+    (when (and data-idx
+               target-data-idx
+               (>= target-row-idx 0)
+               (< target-row-idx (length data-indices)))
+      (rotatef (nth data-idx data) (nth target-data-idx data))
+      (let ((new-str (cltpt/org-mode:list-to-table-string data)))
+        (organ/utils:replace-submatch-text* (lem:current-buffer) match new-str)
+        ;; position cursor on the target row
+        (let* ((new-match (cltpt/org-mode:org-table-matcher
+                           nil
+                           (cltpt/reader:reader-from-string new-str)
+                           0))
+               (new-row-nodes (loop for child in (cltpt/combinator:match-children new-match)
+                                    when (eq (cltpt/combinator:match-id child)
+                                             'cltpt/org-mode::table-row)
+                                      collect child))
+               (moved-row (nth target-row-idx new-row-nodes))
+               (cursor-pos (when moved-row
+                             (+ (1+ table-start-pos)
+                                (cltpt/combinator:match-begin-absolute moved-row)))))
+          (when cursor-pos
+            (lem:move-point (lem:current-point)
+                            (organ/utils:char-offset-to-point (lem:current-buffer)
+                                                              cursor-pos))))))))
+
+(defun org-table-move-column (table-obj direction)
+  "move the table column at point left or right within TABLE-OBJ.
+
+DIRECTION is -1 (left) or +1 (right)."
+  (let* ((match (cltpt/base:text-object-match table-obj))
+         (buf-text (lem:buffer-text (lem:current-buffer)))
+         (table-str (cltpt/combinator:match-text match buf-text))
+         (table-start-pos (cltpt/combinator:match-begin-absolute match))
+         (fresh-match match)
+         (data (cltpt/org-mode:table-match-to-list table-str fresh-match))
+         (width (cltpt/org-mode:get-table-width fresh-match))
+         ;; find which column the cursor is in using cursor's column position
+         (cursor-col (lem:point-column (lem:current-point)))
+         (first-row (find-if
+                     (lambda (n)
+                       (eq (cltpt/combinator:match-id n) 'cltpt/org-mode::table-row))
+                     (cltpt/combinator:match-children fresh-match)))
+         (row-cells (when first-row
+                      (remove-if-not
+                       (lambda (n)
+                         (eq (cltpt/combinator:match-id n) 'cltpt/org-mode::table-cell))
+                       (cltpt/combinator:match-children first-row))))
+         (row-begin (when first-row
+                      (cltpt/combinator:match-begin first-row)))
+         (col-idx (when row-cells
+                    (or (loop for c in row-cells
+                              for i from 0
+                              when (and (>= cursor-col
+                                            (+ row-begin (cltpt/combinator:match-begin c)))
+                                        (< cursor-col
+                                           (+ row-begin (cltpt/combinator:match-end c))))
+                                return i)
+                        ;; on delimiter: find nearest cell to the right
+                        (loop for c in row-cells
+                              for i from 0
+                              when (>= (+ row-begin (cltpt/combinator:match-begin c))
+                                       cursor-col)
+                                return i)
+                        ;; past last cell: use last column
+                        (1- (length row-cells)))))
+         (target-col (when col-idx
+                       (+ col-idx direction))))
+    (when (and col-idx target-col (>= target-col 0) (< target-col width))
+      ;; swap columns in every data row
+      (dolist (row data)
+        (when (listp row)
+          (rotatef (nth col-idx row) (nth target-col row))))
+      (let ((new-str (cltpt/org-mode:list-to-table-string data)))
+        (organ/utils:replace-submatch-text* (lem:current-buffer) match new-str)
+        ;; position cursor on the target column, same row
+        (let* ((new-match (cltpt/org-mode:org-table-matcher
+                           nil
+                           (cltpt/reader:reader-from-string new-str)
+                           0))
+               ;; find current row index from cursor line within the table
+               (cur-line (lem:line-number-at-point (lem:current-point)))
+               (table-line (lem:line-number-at-point
+                            (organ/utils:char-offset-to-point
+                             (lem:current-buffer)
+                             (1+ table-start-pos))))
+               (row-offset (- cur-line table-line))
+               ;; count how many data rows precede the cursor line
+               (row-coord (let ((data-row-idx -1)
+                                (line-idx 0))
+                            (dolist (child (cltpt/combinator:match-children fresh-match))
+                              (case (cltpt/combinator:match-id child)
+                                (cltpt/org-mode::table-row
+                                 (incf data-row-idx)
+                                 (when (= line-idx row-offset)
+                                   (return data-row-idx))
+                                 (incf line-idx))
+                                (cltpt/org-mode::table-hrule
+                                 (incf line-idx))
+                                (cltpt/org-mode::table-row-separator
+                                 nil)))))
+               (target-cell (when row-coord
+                              (cltpt/org-mode:get-cell-at-coordinates
+                               new-match
+                               (cons target-col row-coord))))
+               (cursor-pos (when target-cell
+                             (+ (1+ table-start-pos)
+                                (cltpt/combinator:match-begin-absolute target-cell)))))
+          (when cursor-pos
+            (lem:move-point (lem:current-point)
+                            (organ/utils:char-offset-to-point (lem:current-buffer)
+                                                              cursor-pos))))))))
+
 (defun org-list-move-item (list-obj direction)
   "move the list item at point up or down within LIST-OBJ.
 
@@ -539,19 +685,32 @@ swaps only the content portion, keeping bullets and indentation in place."
     (cond
       ((and (equal (lem-core::parse-keyspec "Shift-Tab") key-seq)
             table-found)
-       (org-table-move table-found -1 0))
+       (org-table-navigate table-found -1 0))
       ((and (equal (lem-core::parse-keyspec "Tab") key-seq)
             table-found)
-       (org-table-move table-found 1 0))
+       (org-table-navigate table-found 1 0))
       ((and (equal (lem-core::parse-keyspec "Return") key-seq)
             table-found)
-       (org-table-move table-found 0 1))
+       (org-table-navigate table-found 0 1))
       ;; list continuation: return at end-of-line on a list item
       ((and (equal (lem-core::parse-keyspec "Return") key-seq)
             list-found
             (lem:end-line-p (lem:current-point)))
        (organ-list-newline list-found))
-      ;; list item move up/down
+      ;; move up/down (table rows or list items)
+      ((and (equal (lem-core::parse-keyspec "M-k") key-seq)
+            table-found)
+       (org-table-move-row table-found -1))
+      ((and (equal (lem-core::parse-keyspec "M-j") key-seq)
+            table-found)
+       (org-table-move-row table-found 1))
+      ;; move columns left/right
+      ((and (equal (lem-core::parse-keyspec "M-h") key-seq)
+            table-found)
+       (org-table-move-column table-found -1))
+      ((and (equal (lem-core::parse-keyspec "M-l") key-seq)
+            table-found)
+       (org-table-move-column table-found 1))
       ((and (equal (lem-core::parse-keyspec "M-k") key-seq)
             list-found)
        (org-list-move-item list-found -1))
