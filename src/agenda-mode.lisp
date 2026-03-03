@@ -181,13 +181,11 @@ at or after the current hour. returns a 1-indexed line number."
               (lem:switch-to-buffer (lem:find-file-buffer filepath))
               (lem:move-to-position (lem:current-point)
                                     (1+ (cltpt/base:text-object-begin-in-root text-obj))))))
-        (let ((text-obj (cltpt/base:child-at-pos
-                         (organ/organ-mode:current-tree)
-                         (organ/utils:current-pos))))
-          (loop while text-obj
-                until (typep text-obj 'cltpt/org-mode:org-header)
-                do (setf text-obj (cltpt/base:text-object-parent text-obj)))
-          (setf header text-obj)))
+        (setf header
+              (organ/utils:find-node-at-pos
+               (organ/organ-mode:current-tree)
+               (organ/utils:current-pos)
+               'cltpt/org-mode:org-header)))
     header))
 
 (defmethod lem:keymap-children ((keymap (eql *todo-state-keymap*)))
@@ -228,8 +226,8 @@ at or after the current hour. returns a 1-indexed line number."
                    header
                    'cltpt/org-mode::todo-keyword
                    (princ-to-string (cltpt/agenda:state-name new-state)))))
-              (lem:message "this header contains no TODO data.")))
-        (lem:message "not under header"))))
+              (lem:editor-error "this header contains no TODO data.")))
+        (lem:editor-error "not under header"))))
 
 (defmethod lem/transient:mode-transient-keymap ((mode agenda-mode))
   *agenda-mode-keymap*)

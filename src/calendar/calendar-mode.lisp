@@ -12,7 +12,7 @@
    :calendar-marked-dates
    :calendar-date
    :+days-per-week+
-   :popup-calendar-with-callback))
+   :popup-calendar-prompt))
 
 (in-package :organ/calendar-mode)
 

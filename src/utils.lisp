@@ -3,7 +3,9 @@
   (:export
    :char-offset-to-point :current-pos :replace-text-between-positions
    :*weekday-names*
-   :format-timestamp :replace-submatch-text :replace-submatch-text*))
+   :format-timestamp :format-inactive-timestamp-with-time
+   :replace-submatch-text :replace-submatch-text*
+   :find-parent-of-type :find-node-at-pos :find-node-at-point))
 
 (in-package :organ/utils)
 
@@ -69,3 +71,33 @@
          (weekday (nth (local-time:timestamp-day-of-week timestamp)
                        *weekday-names*)))
     (format nil "<~A ~A>" base weekday)))
+
+(defun format-inactive-timestamp-with-time (&optional (timestamp (local-time:now)))
+  "return an inactive timestamp with time like [2024-01-30 Tue 15:02:11] for the given TIMESTAMP."
+  (let* ((base (local-time:format-timestring
+                nil
+                timestamp
+                :format '(:year "-" (:month 2) "-" (:day 2))))
+         (time-str (local-time:format-timestring
+                    nil
+                    timestamp
+                    :format '((:hour 2) ":" (:min 2) ":" (:sec 2))))
+         (weekday (nth (local-time:timestamp-day-of-week timestamp)
+                       *weekday-names*)))
+    (format nil "[~A ~A ~A]" base weekday time-str)))
+
+(defun find-parent-of-type (node type)
+  "walk up from NODE using `cltpt/base:text-object-parent' to find the first ancestor of TYPE."
+  (loop for current = node then (cltpt/base:text-object-parent current)
+        while current
+        when (typep current type)
+          return current))
+
+(defun find-node-at-pos (tree pos type)
+  "find the node of TYPE at the given character offset POS in TREE."
+  (let ((node (cltpt/base:child-at-pos tree pos)))
+    (find-parent-of-type node type)))
+
+(defun find-node-at-point (tree point type)
+  "find the node of TYPE at the given lem POINT in TREE."
+  (find-node-at-pos tree (point-to-char-offset point) type))

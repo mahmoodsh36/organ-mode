@@ -1,11 +1,10 @@
 (defpackage :organ/popup-calendar
   (:use :cl :lem)
-  (:export :popup-calendar :popup-calendar-with-callback :test-popup-calendar))
+  (:export :popup-calendar :popup-calendar-prompt :test-popup-calendar))
 
 (in-package :organ/popup-calendar)
 
 (define-editor-variable popup-calendar-date nil)
-(define-editor-variable popup-calendar-callback nil)
 (define-editor-variable popup-calendar-source-buffer nil)
 (define-editor-variable popup-calendar-window nil)
 
@@ -255,13 +254,11 @@ supported formats:
   (when *popup-calendar-active*
     (cleanup-popup-calendar)))
 
-(defun popup-calendar-with-callback (prompt-msg callback &optional initial-date)
-  "open a popup calendar wih CALLBACK. INITIAL-DATE can be a timestamp or nil."
+(defun popup-calendar-prompt (prompt-msg &optional initial-date)
+  "open a popup calendar prompt. INITIAL-DATE can be a timestamp or nil."
   (let ((source-buffer (current-buffer))
         (calendar-buffer (create-popup-calendar-buffer)))
-    (setf (variable-value 'popup-calendar-callback :buffer calendar-buffer)
-          callback
-          (variable-value 'popup-calendar-source-buffer :buffer calendar-buffer)
+    (setf (variable-value 'popup-calendar-source-buffer :buffer calendar-buffer)
           source-buffer
           *popup-calendar-current-buffer*
           calendar-buffer)
@@ -294,30 +291,24 @@ supported formats:
                                 nil))))
                (setf *popup-calendar-active* nil
                      *popup-calendar-current-buffer* nil)
-               (if cancelled
-                   (progn
-                     (when callback (funcall callback nil))
-                     nil)
-                   (let* ((navigated-date (when (buffer-name calendar-buffer)
-                                            (variable-value 'popup-calendar-date
-                                                            :buffer calendar-buffer)))
-                          (final-date (or navigated-date
-                                          (parse-date-time-input result))))
-                     (when callback
-                       (funcall callback final-date))
-                     final-date))))
+               (unless cancelled
+                 (let* ((navigated-date (when (buffer-name calendar-buffer)
+                                          (variable-value 'popup-calendar-date
+                                                          :buffer calendar-buffer)))
+                        (final-date (or navigated-date
+                                        (parse-date-time-input result))))
+                   final-date))))
         (cleanup-popup-calendar calendar-buffer)))))
 
 (define-command popup-calendar () ()
-  "open a popup calendar without callback."
-  (popup-calendar-with-callback
-   (lambda (date)
-     (when date
-       (message "selected date: ~A"
-                (local-time:format-timestring
-                 nil
-                 date
-                 :format '(:long-month " " (:day 2) ", " (:year 4))))))))
+  "open a popup calendar."
+  (let ((date (popup-calendar-prompt "date: ")))
+    (when date
+      (message "selected date: ~A"
+               (local-time:format-timestring
+                nil
+                date
+                :format '(:long-month " " (:day 2) ", " (:year 4)))))))
 
 (define-key *popup-calendar-prompt-keymap* "C-n" 'popup-calendar-next-day)
 (define-key *popup-calendar-prompt-keymap* "C-p" 'popup-calendar-previous-day)

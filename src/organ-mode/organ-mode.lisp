@@ -1,6 +1,6 @@
 (defpackage :organ/organ-mode
   (:use :cl :lem/transient)
-  (:export :organ-mode :current-tree))
+  (:export :organ-mode :current-tree :*log-reschedule*))
 
 (in-package :organ/organ-mode)
 
@@ -13,6 +13,10 @@
 (defvar *organ-enable-incremental-changes*
   nil
   "whether to enable incremental changes in `organ-mode'.")
+
+(defvar *log-reschedule*
+  t
+  "when non-nil, log rescheduling and redeadlining events under the header.")
 
 (defvar *organ-mode-keymap*
   (lem:make-keymap :description '*organ-mode-keymap*))
@@ -60,6 +64,8 @@
   (:key "C-c C-p" :suffix 'organ-prev-header)
   (:key "C-c C-x C-n" :suffix 'organ-next-link)
   (:key "C-c C-x C-p" :suffix 'organ-prev-link)
+  (:key "C-c C-s" :suffix 'organ-schedule)
+  (:key "C-c C-d" :suffix 'organ-deadline)
   (:key "C-c C-v C-n" :suffix 'organ-next-src-block)
   (:key "C-c C-v C-p" :suffix 'organ-prev-src-block)
   (:key "C-c C-e" :suffix *organ-mode-export-keymap* :description "export dispatch"))
@@ -233,25 +239,136 @@ for :backward, finds the object starting closest before POS."
   "if there is a timestamp at the cursor, edit it using `popup-calendar', otherwise insert new timestamp."
   (let* ((obj (current-text-obj))
          (pt (lem:buffer-point (lem:current-buffer)))
-         (source-buffer (lem:current-buffer)))
-    (organ/popup-calendar:popup-calendar-with-callback
-     "date: "
-     (lambda (new-date)
-       (when new-date
-         (lem:with-current-buffer source-buffer
-           (if (typep obj 'cltpt/org-mode::org-timestamp)
-               (progn
-                 (organ/utils:replace-text-between-positions
-                  source-buffer
-                  (1+ (cltpt/base:text-object-begin-in-root obj))
-                  (1+ (cltpt/base:text-object-end-in-root obj))
-                  (organ/utils:format-timestamp new-date))
-                 (lem:message "replaced ~A with ~A"
-                              (cltpt/base:text-object-text obj)
-                              new-date))
-               (lem:insert-string
-                pt
-                (organ/utils:format-timestamp new-date)))))))))
+         (source-buffer (lem:current-buffer))
+         (new-date (organ/popup-calendar:popup-calendar-prompt "date: ")))
+    (when new-date
+      (lem:with-current-buffer source-buffer
+        (if (typep obj 'cltpt/org-mode::org-timestamp)
+            (progn
+              (organ/utils:replace-text-between-positions
+               source-buffer
+               (1+ (cltpt/base:text-object-begin-in-root obj))
+               (1+ (cltpt/base:text-object-end-in-root obj))
+               (organ/utils:format-timestamp new-date))
+              (lem:message "replaced ~A with ~A" (cltpt/base:text-object-text obj) new-date))
+            (lem:insert-string pt (organ/utils:format-timestamp new-date)))))))
+
+(defun organ-set-action-timestamp (action header source-buffer record-type log-keyword)
+  "prompt for a date and insert/update an ACTION (e.g., SCHEDULED, DEADLINE) timestamp under the HEADER."
+  (let ((new-date (organ/popup-calendar:popup-calendar-prompt
+                   (format nil "~A date: " action))))
+    (when new-date
+      (lem:with-current-buffer source-buffer
+        (let* ((task (cltpt/base:text-object-property header :task))
+               (records (when task
+                          (cltpt/agenda:task-records task)))
+               (record (find-if
+                        (lambda (r)
+                          (typep r record-type))
+                        records)))
+          (if record
+              ;; replace existing action timestamp text
+              (let* ((header-match (cltpt/base:text-object-match header))
+                     (action-matches (cltpt/combinator:find-submatch-all
+                                      header-match
+                                      'cltpt/org-mode::action-active))
+                     (action-match
+                       (find-if
+                        (lambda (m)
+                          (string-equal
+                           (cltpt/base:text-object-match-text
+                            header
+                            (cltpt/combinator:find-submatch m 'cltpt/org-mode::name))
+                           action))
+                        action-matches)))
+                (if action-match
+                    (let* ((ts-match (cltpt/combinator:find-submatch
+                                      action-match
+                                      'cltpt/org-mode::timestamp))
+                           (begin-pos (cltpt/combinator:match-begin-absolute ts-match))
+                           (end-pos (cltpt/combinator:match-end-absolute ts-match))
+                           (old-ts-text (cltpt/base:text-object-match-text header ts-match)))
+                      (organ/utils:replace-text-between-positions
+                       source-buffer
+                       (1+ begin-pos)
+                       (1+ end-pos)
+                       (organ/utils:format-timestamp new-date))
+                      (when *log-reschedule*
+                        ;; insert newline and log below the timestamp line
+                        (let* ((new-str (format
+                                         nil
+                                         "~%- ~A from \"[~A]\" on ~A"
+                                         log-keyword
+                                         (remove #\> (remove #\< old-ts-text))
+                                         (organ/utils:format-inactive-timestamp-with-time)))
+                               (line-end-point
+                                 (lem:copy-point
+                                  (lem:buffer-start-point source-buffer)
+                                  :temporary)))
+                          (lem:move-to-position line-end-point (1+ begin-pos))
+                          (lem:line-end line-end-point)
+                          (lem:insert-string line-end-point new-str))))
+                    (lem:editor-error "could not locate ~A timestamp in header." action)))
+              ;; insert new action timestamp
+              (let* ((header-match (cltpt/base:text-object-match header))
+                     (all-actions (cltpt/combinator:find-submatch-all
+                                   header-match
+                                   'cltpt/org-mode::action-active))
+                     (existing-action (car (last all-actions))))
+                (if existing-action
+                    ;; append to existing metadata line
+                    (let ((insert-pos (cltpt/combinator:match-end-absolute existing-action)))
+                      (organ/utils:replace-text-between-positions
+                       source-buffer
+                       (1+ insert-pos)
+                       (1+ insert-pos)
+                       (format nil " ~A: ~A" action (organ/utils:format-timestamp new-date))))
+                    ;; insert new action timestamp on a new line after title
+                    (let* ((header-str (cltpt/base:text-object-text header))
+                           (newline-pos (position #\newline header-str))
+                           (insert-offset (if newline-pos
+                                              newline-pos
+                                              (length header-str)))
+                           (insert-pos (+ (cltpt/base:text-object-begin-in-root header)
+                                          insert-offset)))
+                      (organ/utils:replace-text-between-positions
+                       source-buffer
+                       (1+ insert-pos)
+                       (1+ insert-pos)
+                       (format nil
+                               "~%~A: ~A"
+                               action
+                               (organ/utils:format-timestamp new-date))))))))))))
+
+(lem:define-command organ-schedule () ()
+  "prompt for a date and insert/update a SCHEDULED timestamp under the current org-header."
+  (let ((header (organ/utils:find-node-at-pos (current-tree)
+                                              (organ/utils:current-pos)
+                                              'cltpt/org-mode:org-header))
+        (source-buffer (lem:current-buffer)))
+    (if (not header)
+        (lem:editor-error "not inside an org-header.")
+        (organ-set-action-timestamp
+         "SCHEDULED"
+         header
+         source-buffer
+         'cltpt/agenda/task::record-scheduled
+         "Rescheduled"))))
+
+(lem:define-command organ-deadline () ()
+  "prompt for a date and insert/update a DEADLINE timestamp under the current org-header."
+  (let ((header (organ/utils:find-node-at-pos (current-tree)
+                                              (organ/utils:current-pos)
+                                              'cltpt/org-mode:org-header))
+        (source-buffer (lem:current-buffer)))
+    (if (not header)
+        (lem:editor-error "not inside an org-header.")
+        (organ-set-action-timestamp
+         "DEADLINE"
+         header
+         source-buffer
+         'cltpt/agenda/task::record-deadline
+         "New deadline"))))
 
 ;; this currently only works for links that 'resolve' to filepaths
 (lem:define-command organ-open-at-point () ()
@@ -271,7 +388,7 @@ for :backward, finds the object starting closest before POS."
                 (t dest))))
         (if (probe-file dest-filepath)
             (lem:find-file dest-filepath)
-            (lem:message "file ~A doesnt exist" dest-filepath))))))
+            (lem:editor-error "file ~A doesnt exist" dest-filepath))))))
 
 (defmethod org-table-navigate ((text-obj cltpt/org-mode:org-table) x-shift y-shift)
   (let* ((match (cltpt/base:text-object-match text-obj))
@@ -665,23 +782,13 @@ swaps only the content portion, keeping bullets and indentation in place."
   (let* ((key-seq (lem:last-read-key-sequence))
          (text-obj (current-text-obj))
          (pos (organ/utils:current-pos))
-         (table-found (loop for node = text-obj then (cltpt/base:text-object-parent node)
-                            while node
-                            when (typep node 'cltpt/org-mode:org-table)
-                              return node))
+         (table-found (organ/utils:find-node-at-pos (current-tree) pos 'cltpt/org-mode:org-table))
          ;; find enclosing org-list: try text-obj parent-walk first, fall back
          ;; to pos-1 for boundary cases (e.g. end of last list item where the
          ;; org-list region doesn't include the trailing newline)
-         (list-found (or (loop for node = text-obj then (cltpt/base:text-object-parent node)
-                               while node
-                               when (typep node 'cltpt/org-mode:org-list)
-                                 return node)
+         (list-found (or (organ/utils:find-node-at-pos (current-tree) pos 'cltpt/org-mode:org-list)
                          (when (> pos 0)
-                           (let ((prev-obj (cltpt/base:child-at-pos (current-tree) (1- pos))))
-                             (loop for node = prev-obj then (cltpt/base:text-object-parent node)
-                                   while node
-                                   when (typep node 'cltpt/org-mode:org-list)
-                                     return node))))))
+                           (organ/utils:find-node-at-pos (current-tree) (1- pos) 'cltpt/org-mode:org-list)))))
     (cond
       ((and (equal (lem-core::parse-keyspec "Shift-Tab") key-seq)
             table-found)

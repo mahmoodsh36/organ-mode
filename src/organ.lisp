@@ -27,13 +27,10 @@
 (defmethod lem:prefix-suffix ((prefix lem/transient::timestamp-range))
   (lambda ()
     (lem:with-last-read-key-sequence
-        (let ((begin-ts (organ/popup-calendar:popup-calendar-with-callback
-                         "begin date: "
-                         nil)))
+        (let ((begin-ts (organ/popup-calendar:popup-calendar-prompt "begin date: ")))
           (when begin-ts
-            (let ((end-ts (organ/popup-calendar:popup-calendar-with-callback
+            (let ((end-ts (organ/popup-calendar:popup-calendar-prompt
                            "end date (optional): "
-                           nil
                            begin-ts)))
               (setf (lem/transient:prefix-value prefix)
                     (cltpt/agenda:make-time-range
