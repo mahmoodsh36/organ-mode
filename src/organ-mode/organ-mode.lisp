@@ -342,9 +342,10 @@ for :backward, finds the object starting closest before POS."
 
 (lem:define-command organ-schedule () ()
   "prompt for a date and insert/update a SCHEDULED timestamp under the current org-header."
-  (let ((header (organ/utils:find-node-at-pos (current-tree)
-                                              (organ/utils:current-pos)
-                                              'cltpt/org-mode:org-header))
+  (let ((header (organ/utils:find-node-at-pos
+                 (current-tree)
+                 (organ/utils:current-pos)
+                 'cltpt/org-mode:org-header))
         (source-buffer (lem:current-buffer)))
     (if (not header)
         (lem:editor-error "not inside an org-header.")
@@ -357,9 +358,10 @@ for :backward, finds the object starting closest before POS."
 
 (lem:define-command organ-deadline () ()
   "prompt for a date and insert/update a DEADLINE timestamp under the current org-header."
-  (let ((header (organ/utils:find-node-at-pos (current-tree)
-                                              (organ/utils:current-pos)
-                                              'cltpt/org-mode:org-header))
+  (let ((header (organ/utils:find-node-at-pos
+                 (current-tree)
+                 (organ/utils:current-pos)
+                 'cltpt/org-mode:org-header))
         (source-buffer (lem:current-buffer)))
     (if (not header)
         (lem:editor-error "not inside an org-header.")

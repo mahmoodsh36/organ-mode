@@ -17,7 +17,9 @@
   :base organ/outline-mode:*outline-mode-keymap*
   :display-style :row
   :description "organ-mode keymap"
-  (:key "Return" :suffix 'agenda-mode-follow))
+  (:key "Return" :suffix 'agenda-mode-follow)
+  (:key "C-c C-s" :suffix 'agenda-schedule)
+  (:key "C-c C-d" :suffix 'agenda-deadline))
 
 (lem:define-major-mode agenda-mode organ/outline-mode:outline-mode
   (:name "agenda-mode"
@@ -44,7 +46,7 @@ returns (values filepath text-obj) or nil if NODE is not a task-record."
         (let ((buffer (lem:find-file-buffer filepath)))
           (lem:switch-to-buffer buffer)
           (lem:move-to-position (lem:current-point)
-                                (cltpt/base:text-object-begin-in-root text-obj)))))))
+                                (1+ (cltpt/base:text-object-begin-in-root text-obj))))))))
 
 (defun node-timestamp (node)
   "extract a comparable timestamp from a task-record's time.
@@ -228,6 +230,41 @@ at or after the current hour. returns a 1-indexed line number."
                    (princ-to-string (cltpt/agenda:state-name new-state)))))
               (lem:editor-error "this header contains no TODO data.")))
         (lem:editor-error "not under header"))))
+
+(defun resolve-agenda-header-and-buffer ()
+  "resolve the org-header and source buffer for the agenda entry at point.
+returns (values header source-buffer) or signals an editor-error."
+  (let ((node (organ/outline-mode:node-at-point (lem:current-point))))
+    (multiple-value-bind (filepath text-obj) (task-record-location node)
+      (if (and filepath text-obj)
+          (let* ((source-buffer (lem:find-file-buffer filepath))
+                 (header (organ/utils:find-parent-of-type
+                          text-obj
+                          'cltpt/org-mode:org-header)))
+            (if header
+                (values header source-buffer)
+                (lem:editor-error "not inside an org-header.")))
+          (lem:editor-error "not inside an org-header.")))))
+
+(lem:define-command agenda-schedule () ()
+  "prompt for a date and insert/update a SCHEDULED timestamp for the agenda entry at point."
+  (multiple-value-bind (header source-buffer) (resolve-agenda-header-and-buffer)
+    (organ/organ-mode::organ-set-action-timestamp
+     "SCHEDULED"
+     header
+     source-buffer
+     'cltpt/agenda/task::record-scheduled
+     "Rescheduled")))
+
+(lem:define-command agenda-deadline () ()
+  "prompt for a date and insert/update a DEADLINE timestamp for the agenda entry at point."
+  (multiple-value-bind (header source-buffer) (resolve-agenda-header-and-buffer)
+    (organ/organ-mode::organ-set-action-timestamp
+     "DEADLINE"
+     header
+     source-buffer
+     'cltpt/agenda/task::record-deadline
+     "New deadline")))
 
 (defmethod lem/transient:mode-transient-keymap ((mode agenda-mode))
   *agenda-mode-keymap*)
