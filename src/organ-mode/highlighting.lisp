@@ -46,9 +46,11 @@
          (submatch (cltpt/combinator:find-submatch match submatch-id)))
     (when submatch
       (lem:make-overlay (organ/utils:char-offset-to-point
-                         buf (cltpt/combinator:match-begin submatch))
+                         buf
+                         (cltpt/combinator:match-begin-absolute submatch))
                         (organ/utils:char-offset-to-point
-                         buf (cltpt/combinator:match-end submatch))
+                         buf
+                         (cltpt/combinator:match-end-absolute submatch))
                         attribute))))
 
 ;; like `overlay-for-submatch', except that it acts on all submatches found by id
@@ -57,8 +59,8 @@
   (let* ((match (cltpt/base:text-object-match obj))
          (submatches (cltpt/combinator:find-submatch-all match submatch-id)))
     (loop for submatch in submatches
-          for submatch-begin = (cltpt/combinator:match-begin submatch)
-          for submatch-end = (cltpt/combinator:match-end submatch)
+          for submatch-begin = (cltpt/combinator:match-begin-absolute submatch)
+          for submatch-end = (cltpt/combinator:match-end-absolute submatch)
           collect (lem:make-overlay
                    (organ/utils:char-offset-to-point buf submatch-begin)
                    (organ/utils:char-offset-to-point buf submatch-end)
