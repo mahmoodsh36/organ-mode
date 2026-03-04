@@ -19,7 +19,10 @@
   :description "organ-mode keymap"
   (:key "Return" :suffix 'agenda-mode-follow)
   (:key "C-c C-s" :suffix 'agenda-schedule)
-  (:key "C-c C-d" :suffix 'agenda-deadline))
+  (:key "C-c C-d" :suffix 'agenda-deadline)
+  (:key "C-c C-t" :suffix 'agenda-mode-change-task-state))
+
+(lem:define-key organ/organ-mode:*organ-mode-keymap* "C-c C-t" 'agenda-mode-change-task-state)
 
 (lem:define-major-mode agenda-mode organ/outline-mode:outline-mode
   (:name "agenda-mode"
@@ -190,7 +193,7 @@ at or after the current hour. returns a 1-indexed line number."
                'cltpt/org-mode:org-header)))
     header))
 
-(defmethod lem:keymap-children ((keymap (eql *todo-state-keymap*)))
+(defmethod lem:keymap-prefixes ((keymap (eql *todo-state-keymap*)))
   (let* ((header (current-header))
          (task (cltpt/agenda:text-object-task header))
          (state (cltpt/agenda:task-state task))

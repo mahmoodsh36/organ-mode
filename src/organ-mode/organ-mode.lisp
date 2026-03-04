@@ -1,6 +1,8 @@
 (defpackage :organ/organ-mode
   (:use :cl :lem/transient)
-  (:export :organ-mode :current-tree :*log-reschedule*))
+  (:export
+   :organ-mode :current-tree :*log-reschedule*
+   :*organ-mode-keymap*))
 
 (in-package :organ/organ-mode)
 
