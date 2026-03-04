@@ -270,19 +270,7 @@ for :backward, finds the object starting closest before POS."
                         records)))
           (if record
               ;; replace existing action timestamp text
-              (let* ((header-match (cltpt/base:text-object-match header))
-                     (action-matches (cltpt/combinator:find-submatch-all
-                                      header-match
-                                      'cltpt/org-mode::action-active))
-                     (action-match
-                       (find-if
-                        (lambda (m)
-                          (string-equal
-                           (cltpt/base:text-object-match-text
-                            header
-                            (cltpt/combinator:find-submatch m 'cltpt/org-mode::name))
-                           action))
-                        action-matches)))
+              (let ((action-match (organ/utils:find-header-action header action)))
                 (if action-match
                     (let* ((ts-match (cltpt/combinator:find-submatch
                                       action-match
@@ -290,57 +278,26 @@ for :backward, finds the object starting closest before POS."
                            (begin-pos (cltpt/combinator:match-begin-absolute ts-match))
                            (end-pos (cltpt/combinator:match-end-absolute ts-match))
                            (old-ts-text (cltpt/base:text-object-match-text header ts-match)))
+                      ;; log entry first then timestamp
+                      (when *log-reschedule*
+                        (organ/utils:insert-header-log-entry
+                         source-buffer
+                         header
+                         (format nil "- ~A from \"[~A]\" on ~A"
+                                 log-keyword
+                                 (remove #\> (remove #\< old-ts-text))
+                                 (organ/utils:format-inactive-timestamp-with-time))))
                       (organ/utils:replace-text-between-positions
                        source-buffer
                        (1+ begin-pos)
                        (1+ end-pos)
-                       (organ/utils:format-timestamp new-date))
-                      (when *log-reschedule*
-                        ;; insert newline and log below the timestamp line
-                        (let* ((new-str (format
-                                         nil
-                                         "~%- ~A from \"[~A]\" on ~A"
-                                         log-keyword
-                                         (remove #\> (remove #\< old-ts-text))
-                                         (organ/utils:format-inactive-timestamp-with-time)))
-                               (line-end-point
-                                 (lem:copy-point
-                                  (lem:buffer-start-point source-buffer)
-                                  :temporary)))
-                          (lem:move-to-position line-end-point (1+ begin-pos))
-                          (lem:line-end line-end-point)
-                          (lem:insert-string line-end-point new-str))))
+                       (organ/utils:format-timestamp new-date)))
                     (lem:editor-error "could not locate ~A timestamp in header." action)))
               ;; insert new action timestamp
-              (let* ((header-match (cltpt/base:text-object-match header))
-                     (all-actions (cltpt/combinator:find-submatch-all
-                                   header-match
-                                   'cltpt/org-mode::action-active))
-                     (existing-action (car (last all-actions))))
-                (if existing-action
-                    ;; append to existing metadata line
-                    (let ((insert-pos (cltpt/combinator:match-end-absolute existing-action)))
-                      (organ/utils:replace-text-between-positions
-                       source-buffer
-                       (1+ insert-pos)
-                       (1+ insert-pos)
-                       (format nil " ~A: ~A" action (organ/utils:format-timestamp new-date))))
-                    ;; insert new action timestamp on a new line after title
-                    (let* ((header-str (cltpt/base:text-object-text header))
-                           (newline-pos (position #\newline header-str))
-                           (insert-offset (if newline-pos
-                                              newline-pos
-                                              (length header-str)))
-                           (insert-pos (+ (cltpt/base:text-object-begin-in-root header)
-                                          insert-offset)))
-                      (organ/utils:replace-text-between-positions
-                       source-buffer
-                       (1+ insert-pos)
-                       (1+ insert-pos)
-                       (format nil
-                               "~%~A: ~A"
-                               action
-                               (organ/utils:format-timestamp new-date))))))))))))
+              (organ/utils:append-header-action
+               source-buffer
+               header
+               (format nil "~A: ~A" action (organ/utils:format-timestamp new-date)))))))))
 
 (lem:define-command organ-schedule () ()
   "prompt for a date and insert/update a SCHEDULED timestamp under the current org-header."

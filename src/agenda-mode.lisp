@@ -4,6 +4,10 @@
 
 (in-package :organ/agenda-mode)
 
+(defvar *log-state-change*
+  t
+  "when non-nil, log state changes under the header.")
+
 (lem:define-attribute *agenda-keyword-attribute*
   (t :foreground "blue" :background nil))
 
@@ -118,7 +122,8 @@ at or after the current hour. returns a 1-indexed line number."
                 :format cltpt/agenda:*agenda-time-format*))
              (format-time (time)
                (if (typep time 'cltpt/agenda:time-range)
-                   (format nil "~A--~A"
+                   (format nil
+                           "~A--~A"
                            (format-ts (cltpt/agenda:time-range-begin time))
                            (format-ts (cltpt/agenda:time-range-end time)))
                    (format-ts time))))
@@ -209,6 +214,27 @@ at or after the current hour. returns a 1-indexed line number."
                    :key (car (parse-keyspec (string-downcase (string (char state-name 0)))))
                    :suffix state-name))))
 
+(defun pad-to (str width)
+  "right-pad STR with spaces to WIDTH characters."
+  (let ((len (length str)))
+    (if (>= len width)
+        str
+        (concatenate 'string
+                     str
+                     (make-string (- width len) :initial-element #\space)))))
+
+(defun insert-closed-timestamp (buffer header)
+  "insert CLOSED: [timestamp] on the action line of HEADER."
+  (organ/utils:append-header-action
+   buffer header
+   (format nil
+           "CLOSED: ~A"
+           (organ/utils:format-inactive-timestamp-with-time))))
+
+(defun remove-closed-timestamp (buffer header)
+  "remove an existing CLOSED: [...] entry from HEADER's action line, if present."
+  (organ/utils:remove-header-action buffer header "CLOSED"))
+
 (lem:define-command agenda-mode-change-task-state () ()
   (let ((header (current-header)))
     (if header
@@ -223,14 +249,36 @@ at or after the current hour. returns a 1-indexed line number."
                                   (cltpt/agenda:state-by-name
                                    new-state-name))))
                 (when new-state
-                  (lem:message "state changed from ~A to ~A"
-                               (cltpt/agenda:state-name state)
-                               (cltpt/agenda:state-name new-state))
-                  (organ/utils:replace-submatch-text
-                   (lem:current-buffer)
-                   header
-                   'cltpt/org-mode::todo-keyword
-                   (princ-to-string (cltpt/agenda:state-name new-state)))))
+                  (let ((old-state-name (princ-to-string (cltpt/agenda:state-name state)))
+                        (new-state-name-str (princ-to-string (cltpt/agenda:state-name new-state)))
+                        (was-terminal (cltpt/agenda:state-is-terminal state))
+                        (is-terminal (cltpt/agenda:state-is-terminal new-state)))
+                    (lem:message "state changed from ~A to ~A"
+                                 old-state-name
+                                 new-state-name-str)
+                    ;; insert log entry
+                    (when *log-state-change*
+                      (organ/utils:insert-header-log-entry
+                       (lem:current-buffer)
+                       header
+                       (format nil
+                               "- State ~A from ~A ~A"
+                               ;; we shouldnt hardcode the padding length but thats the way org-mode does it
+                               (pad-to (format nil "\"~A\"" new-state-name-str) 13)
+                               (pad-to (format nil "\"~A\"" old-state-name) 13)
+                               (organ/utils:format-inactive-timestamp-with-time))))
+                    ;; properly place the CLOSED timestamp (on the action line)
+                    (cond
+                      ((and is-terminal (not was-terminal))
+                       (insert-closed-timestamp (lem:current-buffer) header))
+                      ((and was-terminal (not is-terminal))
+                       (remove-closed-timestamp (lem:current-buffer) header)))
+                    ;; TODO keyword replacement
+                    (organ/utils:replace-submatch-text
+                     (lem:current-buffer)
+                     header
+                     'cltpt/org-mode::todo-keyword
+                     new-state-name-str))))
               (lem:editor-error "this header contains no TODO data.")))
         (lem:editor-error "not under header"))))
 

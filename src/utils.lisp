@@ -5,7 +5,9 @@
    :*weekday-names*
    :format-timestamp :format-inactive-timestamp-with-time
    :replace-submatch-text :replace-submatch-text*
-   :find-parent-of-type :find-node-at-pos :find-node-at-point))
+   :find-parent-of-type :find-node-at-pos :find-node-at-point
+   :insert-header-log-entry
+   :append-header-action :find-header-action :remove-header-action))
 
 (in-package :organ/utils)
 
@@ -101,3 +103,94 @@
 (defun find-node-at-point (tree point type)
   "find the node of TYPE at the given lem POINT in TREE."
   (find-node-at-pos tree (point-to-char-offset point) type))
+
+(defun last-header-action (header)
+  "return the last action match (active or inactive) in HEADER, or nil."
+  (let* ((header-match (cltpt/base:text-object-match header))
+         (all-active (cltpt/combinator:find-submatch-all
+                       header-match
+                       'cltpt/org-mode::action-active))
+         (all-inactive (cltpt/combinator:find-submatch-all
+                         header-match
+                         'cltpt/org-mode::action-inactive)))
+    (car (last (append all-active all-inactive)))))
+
+(defun header-after-title-pos (header)
+  "return the absolute position at the end of HEADER's title line."
+  (let* ((header-str (cltpt/base:text-object-text header))
+         (nl (position #\newline header-str)))
+    (+ (cltpt/base:text-object-begin-in-root header)
+       (or nl (length header-str)))))
+
+(defun append-header-action (buffer header action-str)
+  "append ACTION-STR on HEADER's action line, or create a new line after the title."
+  (let ((last-action (last-header-action header)))
+    (if last-action
+        (let ((insert-pos (cltpt/combinator:match-end-absolute last-action)))
+          (replace-text-between-positions
+           buffer
+           (1+ insert-pos)
+           (1+ insert-pos)
+           (format nil " ~A" action-str)))
+        (let ((insert-pos (header-after-title-pos header)))
+          (replace-text-between-positions
+           buffer
+           (1+ insert-pos)
+           (1+ insert-pos)
+           (format nil "~%~A" action-str))))))
+
+(defun find-header-action (header action-name)
+  "find an action match by ACTION-NAME in HEADER."
+  (let* ((header-match (cltpt/base:text-object-match header))
+         (matches (append
+                   (cltpt/combinator:find-submatch-all
+                    header-match
+                    'cltpt/org-mode::action-active)
+                   (cltpt/combinator:find-submatch-all
+                    header-match
+                    'cltpt/org-mode::action-inactive))))
+    (find-if
+     (lambda (m)
+       (string-equal
+        (cltpt/base:text-object-match-text
+         header
+         (cltpt/combinator:find-submatch m 'cltpt/org-mode::name))
+        action-name))
+     matches)))
+
+(defun remove-header-action (buffer header action-name)
+  "remove an action by ACTION-NAME from HEADER's action line."
+  (let ((action-match (find-header-action header action-name)))
+    (when action-match
+      (let* ((begin-pos (cltpt/combinator:match-begin-absolute action-match))
+             (end-pos (cltpt/combinator:match-end-absolute action-match))
+             (header-offset (cltpt/base:text-object-begin-in-root header))
+             (rel-begin (- begin-pos header-offset)))
+        ;; also remove the leading space if there is one
+        (let ((adjusted-begin
+                (if (and (> rel-begin 0)
+                         (char= (char (cltpt/base:text-object-text header)
+                                      (1- rel-begin))
+                                #\space))
+                    (1- begin-pos)
+                    begin-pos)))
+          (replace-text-between-positions
+           buffer
+           (1+ adjusted-begin)
+           (1+ end-pos)
+           ""))))))
+
+(defun insert-header-log-entry (buffer header log-text)
+  "insert LOG-TEXT as a new log line under HEADER's metadata in BUFFER."
+  (let* ((last-action (last-header-action header))
+         (insert-pos
+           (if last-action
+               (cltpt/combinator:match-end-absolute last-action)
+               (header-after-title-pos header)))
+         (line-end-point
+           (lem:copy-point
+            (lem:buffer-start-point buffer)
+            :temporary)))
+    (lem:move-to-position line-end-point (1+ insert-pos))
+    (lem:line-end line-end-point)
+    (lem:insert-string line-end-point (format nil "~%~A" log-text))))
