@@ -20,9 +20,10 @@
                 :components ((:file "organ-mode")
                              (:file "highlighting")))
                (:module "agenda"
-                :pathname "src/"
+                :pathname "src/agenda-mode/"
                 :depends-on ("utils" "outline-mode" "organ-mode")
-                :components ((:file "agenda-mode")))
+                :components ((:file "utils")
+                             (:file "agenda-mode")))
                (:module "organ"
                 :pathname "src/"
                 :depends-on ("organ-mode" "calendar" "agenda")
