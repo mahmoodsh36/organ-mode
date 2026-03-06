@@ -101,21 +101,25 @@
   (if *organ-files*
       (let* ((rmr (cltpt/roam:from-files *organ-files*))
              (items
-               (mapcar
-                (lambda (node)
-                  (if (cltpt/roam:node-text-obj node)
-                      (lem/completion-mode:make-completion-item
-                       :label (cltpt/roam:node-title node)
-                       :detail (symbol-name
-                                (class-name
-                                 (class-of
-                                  (cltpt/roam:node-text-obj node)))))
-                      (lem/completion-mode:make-completion-item
-                       :label (cltpt/roam:node-title node))))
-                (cltpt/roam:roamer-nodes rmr)))
-             (choice-str (lem:prompt-for-string "roam-find (node) "
-                          :completion-function (lambda (x) (lem:completion-strings x items
-                                                            :key #'lem/completion-mode:completion-item-label))))
+               (loop for node in (cltpt/roam:roamer-nodes rmr)
+                     when (cltpt/roam:node-title node)
+                       collect (if (cltpt/roam:node-text-obj node)
+                                   (lem/completion-mode:make-completion-item
+                                    :label (cltpt/roam:node-title node)
+                                    :detail (symbol-name
+                                             (class-name
+                                              (class-of
+                                               (cltpt/roam:node-text-obj node)))))
+                                   (lem/completion-mode:make-completion-item
+                                    :label (cltpt/roam:node-title node)))))
+             (choice-str
+               (lem:prompt-for-string
+                "roam-find (node) "
+                :completion-function (lambda (x)
+                                       (lem:completion-strings
+                                        x
+                                        items
+                                        :key #'lem/completion-mode:completion-item-label))))
              ;; this is problematic because it doesnt work well with duplicates
              (choice-idx (position choice-str
                                    items
