@@ -8,14 +8,46 @@
   t
   "when non-nil, log state changes under the header.")
 
-(lem:define-attribute *agenda-keyword-attribute*
-  (t :foreground "blue" :background nil))
+(lem:define-attribute agenda-keyword-attribute
+  (t :foreground :base0e))
 
-(lem:define-attribute *agenda-time-attribute*
-  (t :foreground "red" :background nil))
+(lem:define-attribute agenda-time-attribute
+  (t :foreground :base09))
 
-(lem:define-attribute *agenda-state-attribute*
-  (t :foreground "purple" :background nil))
+(lem:define-attribute agenda-state-attribute
+  (t :foreground :base0a))
+
+(lem:define-attribute agenda-day-attribute
+  (t :foreground :base07 :bold t))
+
+;; TODO: this pattern is repeated multiple times in the codebase. DRY it.
+(defmethod organ/outline-mode:interactive-render-node ((node cltpt/agenda:agenda-outline-node)
+                                                       buffer
+                                                       point
+                                                       depth)
+  (if (null (cltpt/agenda:agenda-outline-node-parent node))
+      (let ((indent (make-string (* depth 2) :initial-element #\space)))
+        (lem:insert-string point indent)
+        (if (cltpt/tree/outline:could-expand node)
+            (lem:insert-string point
+                               (if (cltpt/tree/outline:should-expand node)
+                                   "- "
+                                   "+ "))
+            (lem:insert-string point "  "))
+        (let ((content-start-pos (lem:copy-point point :right-inserting)))
+          (lem:insert-string point
+                             (format nil "~A" (cltpt/tree/outline:outline-text node))
+                             :attribute 'agenda-day-attribute)
+          (let ((node-end-pos (lem:copy-point point :right-inserting)))
+            (lem:insert-character point #\newline)
+            (lem-core::set-clickable
+             content-start-pos
+             node-end-pos
+             (lambda (window clicked-point)
+               (organ/outline-mode::outline-expand-collapse-at-point clicked-point)))
+            (lem:put-text-property content-start-pos node-end-pos :outline-node node))))
+      ;; non-root node (not a day node): delegate to default
+      (call-next-method)))
 
 (lem/transient:define-transient *agenda-mode-keymap*
   :base organ/outline-mode:*outline-mode-keymap*
@@ -106,13 +138,13 @@
           (when time
             (lem:insert-string point
                                (format-time time)
-                               :attribute '*agenda-time-attribute*)
+                               :attribute 'agenda-time-attribute)
             (lem:insert-string point " ----- "))
           (when prefix-keyword
-            (lem:insert-string point prefix-keyword :attribute '*agenda-keyword-attribute*)
+            (lem:insert-string point prefix-keyword :attribute 'agenda-keyword-attribute)
             (lem:insert-string point ":   "))
           ;; state name without parentheses
-          (lem:insert-string point state-name :attribute '*agenda-state-attribute*)
+          (lem:insert-string point state-name :attribute 'agenda-state-attribute)
           (lem:insert-string point " ")
           ;; title
           (lem:insert-string point title)
