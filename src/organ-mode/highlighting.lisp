@@ -63,7 +63,7 @@
                         attribute))))
 
 ;; like `overlay-for-submatch', except that it acts on all submatches found by id
-(defun overlays-for-all-submatches (buf obj submatch-id attribute)
+(defun overlays-for-submatches (buf obj submatch-id attribute)
   "a function DRYing highilighting of submatches."
   (let* ((match (cltpt/base:text-object-match obj))
          (submatches (cltpt/combinator:find-submatch-all match submatch-id)))
@@ -119,14 +119,14 @@
    (list
     (overlay-for-submatch buf obj 'cltpt/org-mode::title 'organ-header-title-attribute)
     (overlay-for-submatch buf obj 'cltpt/org-mode::stars 'organ-header-stars-attribute)
-    (overlays-for-all-submatches buf
-                                 obj
-                                 'cltpt/org-mode::timestamp
-                                 'organ-timestamp-attribute)
-    (overlays-for-all-submatches buf
-                                 obj
-                                 'cltpt/org-mode::todo-timestamp
-                                 'organ-timestamp-attribute)
+    (overlays-for-submatches buf
+                             obj
+                             'cltpt/org-mode::timestamp
+                             'organ-timestamp-attribute)
+    (overlays-for-submatches buf
+                             obj
+                             'cltpt/org-mode::todo-timestamp
+                             'organ-timestamp-attribute)
     (overlay-for-submatch buf
                           obj
                           'cltpt/org-mode::todo-keyword
@@ -177,10 +177,10 @@
                          (organ/utils:char-offset-to-point buf end)
                          'organ-block-attribute)))
      ;; highlight :key: names in drawer entries
-     (overlays-for-all-submatches buf
-                                  obj
-                                  'cltpt/org-mode::drawer-key
-                                  'organ-block-keyword-attribute))))
+     (overlays-for-submatches buf
+                              obj
+                              'cltpt/org-mode::drawer-key
+                              'organ-block-keyword-attribute))))
 
 ;; highlight :name: and :END: in generic drawers
 (defmethod text-object-overlays ((obj cltpt/org-mode:org-drawer) buf)
@@ -192,22 +192,22 @@
 
 ;; highlight only the bullet characters in lists
 (defmethod text-object-overlays ((obj cltpt/org-mode:org-list) buf)
-  (overlays-for-all-submatches buf
-                               obj
-                               'cltpt/org-mode::list-item-bullet
-                               'organ-list-bullet-attribute))
+  (overlays-for-submatches buf
+                           obj
+                           'cltpt/org-mode::list-item-bullet
+                           'organ-list-bullet-attribute))
 
 ;; highlight vertical delimiters (pipes) and horizontal rules (separators) in tables
 (defmethod text-object-overlays ((obj cltpt/org-mode:org-table) buf)
   (append
-   (overlays-for-all-submatches buf
-                                obj
-                                'cltpt/org-mode::table-cell-delimiter
-                                'organ-table-delimiter-attribute)
-   (overlays-for-all-submatches buf
-                                obj
-                                'cltpt/org-mode::table-hrule
-                                'organ-table-delimiter-attribute)))
+   (overlays-for-submatches buf
+                            obj
+                            'cltpt/org-mode::table-cell-delimiter
+                            'organ-table-delimiter-attribute)
+   (overlays-for-submatches buf
+                            obj
+                            'cltpt/org-mode::table-hrule
+                            'organ-table-delimiter-attribute)))
 
 ;; highlight \begin{...} and \end{...} tags in latex environments
 (defmethod text-object-overlays ((obj cltpt/latex:latex-env) buf)
