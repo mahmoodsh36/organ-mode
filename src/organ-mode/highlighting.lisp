@@ -35,7 +35,7 @@
 
 ;; should return a list of attributes for lem for "syntax highlighting" in a buffer.
 ;; technically could be used for more than just syntax highlighting.
-(defgeneric text-object-lem-overlays (text-obj buf))
+(defgeneric text-object-overlays (text-obj buf))
 
 (defun begin-in-root (obj)
   "alternative to `cltpt/base:text-object-begin-in-root' that makes use of :parent-pos property set by `organ-redraw-buffer'."
@@ -103,7 +103,7 @@
                    'organ-block-keyword-attribute))))
 
 ;; default: highlight with buffer's foreground color
-(defmethod text-object-lem-overlays ((obj cltpt/base:text-object) buf)
+(defmethod text-object-overlays ((obj cltpt/base:text-object) buf)
   (unless (typep obj 'cltpt/base::document)
     (let ((begin (begin-in-root obj))
           (end (end-in-root obj)))
@@ -113,7 +113,7 @@
                          'organ-default-attribute)))))
 
 ;; consult cltpt/org-mode:*org-header-rule*
-(defmethod text-object-lem-overlays ((obj cltpt/org-mode:org-header) buf)
+(defmethod text-object-overlays ((obj cltpt/org-mode:org-header) buf)
   (remove-if-not
    #'identity
    (list
@@ -134,7 +134,7 @@
 
 ;; consult cltpt/org-mode:*org-block-rule*
 ;; highlight only #+begin_<type> and #+end_<type>, plus :keyword names
-(defmethod text-object-lem-overlays ((obj cltpt/org-mode:org-block) buf)
+(defmethod text-object-overlays ((obj cltpt/org-mode:org-block) buf)
   (let* ((match (cltpt/base:text-object-match obj))
          (begin-match (cltpt/combinator:find-submatch match 'cltpt/org-mode::begin))
          (begin-type-match (cltpt/combinator:find-submatch match 'cltpt/org-mode::begin-type))
@@ -165,7 +165,7 @@
      (overlays-for-block-keywords buf obj))))
 
 ;; highlight :PROPERTIES:, :END:, and :key: names in property drawers
-(defmethod text-object-lem-overlays ((obj cltpt/org-mode:org-prop-drawer) buf)
+(defmethod text-object-overlays ((obj cltpt/org-mode:org-prop-drawer) buf)
   (let ((end (end-in-root obj)))
     (append
      (remove-if-not
@@ -183,7 +183,7 @@
                                   'organ-block-keyword-attribute))))
 
 ;; highlight :name: and :END: in generic drawers
-(defmethod text-object-lem-overlays ((obj cltpt/org-mode:org-drawer) buf)
+(defmethod text-object-overlays ((obj cltpt/org-mode:org-drawer) buf)
   (remove-if-not
    #'identity
    (list
@@ -191,14 +191,14 @@
     (overlay-for-submatch buf obj 'cltpt/org-mode::drawer-close-tag 'organ-block-attribute))))
 
 ;; highlight only the bullet characters in lists
-(defmethod text-object-lem-overlays ((obj cltpt/org-mode:org-list) buf)
+(defmethod text-object-overlays ((obj cltpt/org-mode:org-list) buf)
   (overlays-for-all-submatches buf
                                obj
                                'cltpt/org-mode::list-item-bullet
                                'organ-list-bullet-attribute))
 
 ;; highlight vertical delimiters (pipes) and horizontal rules (separators) in tables
-(defmethod text-object-lem-overlays ((obj cltpt/org-mode:org-table) buf)
+(defmethod text-object-overlays ((obj cltpt/org-mode:org-table) buf)
   (append
    (overlays-for-all-submatches buf
                                 obj
@@ -210,7 +210,7 @@
                                 'organ-table-delimiter-attribute)))
 
 ;; highlight \begin{...} and \end{...} tags in latex environments
-(defmethod text-object-lem-overlays ((obj cltpt/latex:latex-env) buf)
+(defmethod text-object-overlays ((obj cltpt/latex:latex-env) buf)
   (remove-if-not
    #'identity
    (list
@@ -218,7 +218,7 @@
     (overlay-for-submatch buf obj 'cltpt/latex::close-tag 'organ-latex-env-attribute))))
 
 ;; highlight #+keyword: part
-(defmethod text-object-lem-overlays ((obj cltpt/org-mode:org-keyword) buf)
+(defmethod text-object-overlays ((obj cltpt/org-mode:org-keyword) buf)
   (let* ((match (cltpt/base:text-object-match obj))
          (kw-submatch (cltpt/combinator:find-submatch match 'cltpt/org-mode::keyword)))
     (when kw-submatch
@@ -230,14 +230,14 @@
                            'organ-keyword-attribute))))))
 
 ;; highlight \( \) and \[ \] delimiters in inline/display math
-(defmethod text-object-lem-overlays ((obj cltpt/latex:inline-math) buf)
+(defmethod text-object-overlays ((obj cltpt/latex:inline-math) buf)
   (overlays-for-delimiter-pair buf obj 'organ-latex-env-attribute 2))
 
-(defmethod text-object-lem-overlays ((obj cltpt/latex:display-math) buf)
+(defmethod text-object-overlays ((obj cltpt/latex:display-math) buf)
   (overlays-for-delimiter-pair buf obj 'organ-latex-env-attribute 2))
 
 ;; highlight #+begin_export and #+end_export tags
-(defmethod text-object-lem-overlays ((obj cltpt/org-mode:org-export-block) buf)
+(defmethod text-object-overlays ((obj cltpt/org-mode:org-export-block) buf)
   (remove-if-not
    #'identity
    (list
@@ -271,7 +271,7 @@
                           'organ-block-attribute))))))))
 
 ;; highlight #+begin_src/#+end_src, :keyword, #+RESULTS, and ": " prefix in results
-(defmethod text-object-lem-overlays ((obj cltpt/org-mode:org-src-block) buf)
+(defmethod text-object-overlays ((obj cltpt/org-mode:org-src-block) buf)
   (let ((match (cltpt/base:text-object-match obj)))
     (append
      (remove-if-not
@@ -343,7 +343,7 @@
    (lem:buffer-value buf 'cltpt-tree)
    (lambda (obj parent-pos)
      (setf (cltpt/base:text-object-property obj :parent-pos) parent-pos)
-     (text-object-lem-overlays obj buf)
+     (text-object-overlays obj buf)
      ;; apply language-specific syntax highlighting for src blocks
      (when (typep obj 'cltpt/org-mode:org-src-block)
        (apply-src-block-syntax-highlighting obj buf)))))
