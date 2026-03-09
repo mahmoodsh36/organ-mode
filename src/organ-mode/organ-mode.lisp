@@ -20,8 +20,10 @@
   t
   "when non-nil, log rescheduling and redeadlining events under the header.")
 
-(defvar *organ-mode-keymap*
-  (lem:make-keymap :description '*organ-mode-keymap*))
+(defvar *org-table-add-row-on-tab* t
+  "whether pressing tab in the last cell of an org-table will reformat the table and add a new empty row.
+
+when nil, it will only reformat the table and the cursor will remain in the last cell.")
 
 (define-transient *organ-mode-export-keymap*
   :display-style :row
@@ -57,6 +59,51 @@
              :description "export to html buffer")
             (:key "o" :suffix 'test :description "export to html file, open it."))))
 
+(define-prefix *swap-up-prefix*
+  :key "M-k"
+  :behavior :drop
+  :description "swap up (element-specific)")
+
+(define-prefix *swap-down-prefix*
+  :key "M-j"
+  :behavior :drop
+  :description "swap down (element-specific)")
+
+(define-prefix *swap-right-prefix*
+  :key "M-l"
+  :behavior :drop
+  :description "swap right (element-specific)")
+
+(define-prefix *swap-left-prefix*
+  :key "M-h"
+  :behavior :drop
+  :description "swap left (element-specific)")
+
+;; this doesnt work properly yet, vi-mode's normal-mode return key takes priority over it.
+(define-prefix *return-prefix*
+  :key "Return"
+  :behavior :drop
+  :description "context-sensitive return")
+
+(define-prefix *tab-prefix*
+  :key "Tab"
+  :behavior :drop
+  :description "context-sensitive tab")
+
+(define-prefix *shift-tab-prefix*
+  :key "Shift-Tab"
+  :behavior :drop
+  :description "context-sensitive shift-tab")
+
+(define-transient *organ-dwim-keymap*
+  *swap-up-prefix*
+  *swap-down-prefix*
+  *swap-right-prefix*
+  *swap-left-prefix*
+  *return-prefix*
+  *tab-prefix*
+  *shift-tab-prefix*)
+
 (define-transient *organ-mode-keymap*
   :display-style :row
   :description "organ-mode keymap"
@@ -70,26 +117,25 @@
   (:key "C-c C-d" :suffix 'organ-deadline)
   (:key "C-c C-v C-n" :suffix 'organ-next-src-block)
   (:key "C-c C-v C-p" :suffix 'organ-prev-src-block)
-  (:key "C-c C-e" :suffix *organ-mode-export-keymap* :description "export dispatch"))
+  (:key "C-c C-e" :suffix *organ-mode-export-keymap* :description "export dispatch")
+  *organ-dwim-keymap*)
 
 (defvar *organ-mode-hook*
   '((organ-mode-init-all . 0)))
 
-(lem:define-major-mode *organ-mode* nil
+(lem:define-major-mode organ-mode nil
   (:name "organ-mode"
    :keymap *organ-mode-keymap*
    :mode-hook *organ-mode-hook*)
   (setf (lem:variable-value 'lem:enable-syntax-highlight) t))
 
-(lem:define-file-type ("org") *organ-mode*)
+(defmethod lem-vi-mode/core:mode-specific-keymaps ((mode organ-mode))
+  (list *organ-mode-keymap*))
 
-(defmethod lem/transient:mode-transient-keymap ((mode *organ-mode*))
+(lem:define-file-type ("org") organ-mode)
+
+(defmethod lem/transient:mode-transient-keymap ((mode organ-mode))
   *organ-mode-keymap*)
-
-(defvar *org-table-add-row-on-tab* t
-  "whether pressing tab in the last cell of an org-table will reformat the table and add a new empty row.
-
-when nil, it will only reformat the table and the cursor will remain in the last cell.")
 
 (defun organ-mode-init-all ()
   "called when organ-mode is started, adds modification hooks to reparse buffer."
@@ -738,56 +784,6 @@ swaps only the content portion, keeping bullets and indentation in place."
                             (organ/utils:char-offset-to-point (lem:current-buffer)
                                                               cursor-pos))))))))
 
-;; detect tab/return and dispatch
-(defmethod lem:execute :around ((mode *organ-mode*) command argument)
-  (let* ((key-seq (lem:last-read-key-sequence))
-         (text-obj (current-text-obj))
-         (pos (organ/utils:current-pos))
-         (table-found (organ/utils:find-node-at-pos (current-tree) pos 'cltpt/org-mode:org-table))
-         ;; find enclosing org-list: try text-obj parent-walk first, fall back
-         ;; to pos-1 for boundary cases (e.g. end of last list item where the
-         ;; org-list region doesn't include the trailing newline)
-         (list-found (or (organ/utils:find-node-at-pos (current-tree) pos 'cltpt/org-mode:org-list)
-                         (when (> pos 0)
-                           (organ/utils:find-node-at-pos (current-tree) (1- pos) 'cltpt/org-mode:org-list)))))
-    (cond
-      ((and (equal (lem-core::parse-keyspec "Shift-Tab") key-seq)
-            table-found)
-       (org-table-navigate table-found -1 0))
-      ((and (equal (lem-core::parse-keyspec "Tab") key-seq)
-            table-found)
-       (org-table-navigate table-found 1 0))
-      ((and (equal (lem-core::parse-keyspec "Return") key-seq)
-            table-found)
-       (org-table-navigate table-found 0 1))
-      ;; list continuation: return at end-of-line on a list item
-      ((and (equal (lem-core::parse-keyspec "Return") key-seq)
-            list-found
-            (lem:end-line-p (lem:current-point)))
-       (organ-list-newline list-found))
-      ;; move up/down (table rows or list items)
-      ((and (equal (lem-core::parse-keyspec "M-k") key-seq)
-            table-found)
-       (org-table-move-row table-found -1))
-      ((and (equal (lem-core::parse-keyspec "M-j") key-seq)
-            table-found)
-       (org-table-move-row table-found 1))
-      ;; move columns left/right
-      ((and (equal (lem-core::parse-keyspec "M-h") key-seq)
-            table-found)
-       (org-table-move-column table-found -1))
-      ((and (equal (lem-core::parse-keyspec "M-l") key-seq)
-            table-found)
-       (org-table-move-column table-found 1))
-      ((and (equal (lem-core::parse-keyspec "M-k") key-seq)
-            list-found)
-       (org-list-move-item list-found -1))
-      ((and (equal (lem-core::parse-keyspec "M-j") key-seq)
-            list-found)
-       (org-list-move-item list-found 1))
-      ;; delegate to default action
-      (t (call-next-method)))))
-
 (defun convert-buffer (dest-format)
   (let* ((tree (current-tree))
          (output (cltpt:convert-document cltpt/org-mode:*org-mode* dest-format tree)))
@@ -812,3 +808,97 @@ swaps only the content portion, keeping bullets and indentation in place."
     (lem:with-current-buffer buffer
       (lem-core/commands/file:revert-buffer t))
     (lem:pop-to-buffer buffer)))
+
+;; this is a special case where we also care about current_pos-1
+(defun find-node-at-current-pos (type)
+  (let ((pos (organ/utils:current-pos))
+        (tree (current-tree)))
+    ;; find enclosing element: try text-obj parent-walk first, fall back to pos-1 for
+    ;; the boundary case (end of last list item where the org-list region doesnt include
+    ;; the trailing newline).
+    (when tree
+      (or (organ/utils:find-node-at-pos
+           tree
+           pos
+           type)
+          (when (> pos 0)
+            (organ/utils:find-node-at-pos
+             tree
+             (1- pos)
+             type))))))
+
+(defmethod prefix-active-p ((p (eql *swap-up-prefix*)))
+  (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table))
+        (list-found (find-node-at-current-pos 'cltpt/org-mode:org-list)))
+    (or table-found list-found)))
+
+(defmethod prefix-suffix ((p (eql *swap-up-prefix*)))
+  (lambda ()
+    (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table))
+          (list-found (find-node-at-current-pos 'cltpt/org-mode:org-list)))
+      (cond
+        (table-found (org-table-move-row table-found -1))
+        (list-found (org-list-move-item list-found -1))))))
+
+(defmethod prefix-active-p ((p (eql *swap-down-prefix*)))
+  (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table))
+        (list-found (find-node-at-current-pos 'cltpt/org-mode:org-list)))
+    (or table-found list-found)))
+
+(defmethod prefix-suffix ((p (eql *swap-down-prefix*)))
+  (lambda ()
+    (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table))
+          (list-found (find-node-at-current-pos 'cltpt/org-mode:org-list)))
+      (cond
+        (table-found (org-table-move-row table-found 1))
+        (list-found (org-list-move-item list-found 1))))))
+
+(defmethod prefix-active-p ((p (eql *swap-left-prefix*)))
+  (find-node-at-current-pos 'cltpt/org-mode:org-table))
+
+(defmethod prefix-suffix ((p (eql *swap-left-prefix*)))
+  (lambda ()
+    (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table)))
+      (when table-found
+        (org-table-move-column table-found -1)))))
+
+(defmethod prefix-active-p ((p (eql *swap-right-prefix*)))
+  (find-node-at-current-pos 'cltpt/org-mode:org-table))
+
+(defmethod prefix-suffix ((p (eql *swap-right-prefix*)))
+  (lambda ()
+    (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table)))
+      (when table-found
+        (org-table-move-column table-found 1)))))
+
+(defmethod prefix-active-p ((p (eql *return-prefix*)))
+  (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table))
+        (list-found (find-node-at-current-pos 'cltpt/org-mode:org-list)))
+    (or table-found
+        (and list-found (lem:end-line-p (lem:current-point))))))
+
+(defmethod prefix-active-p ((p (eql *tab-prefix*)))
+  (find-node-at-current-pos 'cltpt/org-mode:org-table))
+
+(defmethod prefix-suffix ((p (eql *tab-prefix*)))
+  (lambda ()
+    (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table)))
+      (when table-found
+        (org-table-navigate table-found 1 0)))))
+
+(defmethod prefix-active-p ((p (eql *shift-tab-prefix*)))
+  (find-node-at-current-pos 'cltpt/org-mode:org-table))
+
+(defmethod prefix-suffix ((p (eql *shift-tab-prefix*)))
+  (lambda ()
+    (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table)))
+      (when table-found
+        (org-table-navigate table-found -1 0)))))
+
+(defmethod prefix-suffix ((p (eql *return-prefix*)))
+  (lambda ()
+    (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table))
+          (list-found (find-node-at-current-pos 'cltpt/org-mode:org-list)))
+      (cond
+        (table-found (org-table-navigate table-found 0 1))
+        (list-found (organ-list-newline list-found))))))
