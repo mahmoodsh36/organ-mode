@@ -96,6 +96,7 @@ when nil, it will only reformat the table and the cursor will remain in the last
   :description "context-sensitive shift-tab")
 
 (define-transient *organ-dwim-keymap*
+  :description "dwim keymap"
   *swap-up-prefix*
   *swap-down-prefix*
   *swap-right-prefix*
