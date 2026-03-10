@@ -99,7 +99,7 @@
 
 (lem:define-command roam-find () ()
   (if *organ-files*
-      (let* ((rmr (cltpt/roam:from-files *organ-files*))
+      (let* ((rmr (cltpt/roam:roamer-from-files *organ-files*))
              (items
                (loop for node in (cltpt/roam:roamer-nodes rmr)
                      when (cltpt/roam:node-title node)
@@ -132,7 +132,7 @@
 
 (lem:define-command agenda-open () ()
   (if *organ-files*
-      (let* ((rmr (cltpt/roam:from-files *organ-files*))
+      (let* ((rmr (cltpt/roam:roamer-from-files *organ-files*))
              (agenda (cltpt/agenda:from-roamer rmr))
              (range *agenda-timestamp-range*))
         (organ/agenda-mode:agenda-mode-open
