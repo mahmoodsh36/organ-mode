@@ -165,16 +165,11 @@ when nil, it will only reformat the table and the cursor will remain in the last
          (cltpt-tree (lem:buffer-value buf 'cltpt-tree)))
     (setf (lem:buffer-value buf 'cltpt-tree)
           (cltpt/base:parse cltpt/org-mode:*org-mode* (lem:buffer-text buf)))
-    (organ-redraw-buffer buf)
-    ;; (lem:message "custom syntax highlighting triggered in ~A, size is ~A"
-    ;;              (lem:buffer-name buf)
-    ;;              (length (lem:buffer-text buf)))
-    ))
+    (organ-redraw-buffer buf)))
 
 (defun current-tree ()
   (lem:buffer-value (lem:current-buffer) 'cltpt-tree))
 
-;; TODO: why are we accepting a text-object if we are using position-in-root anyway?
 (defmethod object-closest-to-pos ((tree cltpt/base:text-object)
                                   pos
                                   direction

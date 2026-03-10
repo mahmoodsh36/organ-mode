@@ -7,7 +7,7 @@
                 :pathname "src/"
                 :components ((:file "utils")))
                (:module "outline-mode"
-                :pathname "src/"
+                :pathname "src/agenda-mode/"
                 :components ((:file "outline-mode")))
                (:module "calendar"
                 :pathname "src/calendar/"

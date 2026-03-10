@@ -35,7 +35,8 @@
 
 ;; should return a list of attributes for lem for "syntax highlighting" in a buffer.
 ;; technically could be used for more than just syntax highlighting.
-(defgeneric text-object-overlays (text-obj buf))
+(defgeneric text-object-overlays
+    (text-obj buf))
 
 (defun begin-in-root (obj)
   "alternative to `cltpt/base:text-object-begin-in-root' that makes use of :parent-pos property set by `organ-redraw-buffer'."
