@@ -33,10 +33,18 @@
 (lem:define-attribute organ-default-attribute
   (t :foreground :base05))
 
+(lem:define-attribute organ-link-attribute
+  (t :foreground :base0d))
+
+(lem:define-attribute organ-underline-attribute
+  (t :underline t))
+
+(lem:define-attribute organ-strike-through-attribute
+  (t :foreground :base03))
+
 ;; should return a list of attributes for lem for "syntax highlighting" in a buffer.
 ;; technically could be used for more than just syntax highlighting.
-(defgeneric text-object-overlays
-    (text-obj buf))
+(defgeneric text-object-overlays (text-obj buf))
 
 (defun begin-in-root (obj)
   "alternative to `cltpt/base:text-object-begin-in-root' that makes use of :parent-pos property set by `organ-redraw-buffer'."
@@ -209,6 +217,22 @@
                             obj
                             'cltpt/org-mode::table-hrule
                             'organ-table-delimiter-attribute)))
+
+(defmethod text-object-overlays ((obj cltpt/org-mode:org-link) buf)
+  (list (lem:make-overlay (organ/utils:char-offset-to-point buf (begin-in-root obj))
+                          (organ/utils:char-offset-to-point buf (end-in-root obj))
+                          'organ-link-attribute)))
+
+(defmethod text-object-overlays ((obj cltpt/org-mode:org-underline) buf)
+  (list (lem:make-overlay (organ/utils:char-offset-to-point buf (begin-in-root obj))
+                          (organ/utils:char-offset-to-point buf (end-in-root obj))
+                          'organ-underline-attribute)))
+
+(defmethod text-object-overlays ((obj cltpt/org-mode:org-strike-through) buf)
+  (list (lem:make-overlay (organ/utils:char-offset-to-point buf (begin-in-root obj))
+                          (organ/utils:char-offset-to-point buf (end-in-root obj))
+                          'organ-strike-through-attribute)))
+
 
 ;; highlight \begin{...} and \end{...} tags in latex environments
 (defmethod text-object-overlays ((obj cltpt/latex:latex-env) buf)
