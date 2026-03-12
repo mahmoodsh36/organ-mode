@@ -1,7 +1,7 @@
 (defpackage :organ/utils
   (:use :cl)
   (:export
-   :char-offset-to-point :current-pos :replace-text-between-positions
+   :char-offset-to-point :point-to-char-offset :current-pos :replace-text-between-positions
    :*weekday-names*
    :format-timestamp :format-inactive-timestamp-with-time
    :replace-submatch-text :replace-submatch-text*

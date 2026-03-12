@@ -2,7 +2,7 @@
   :description "organ-mode - an alternative to org-mode for lem."
   :version "0.1"
   :author "Mahmood Sheikh <mahmod.m2015@gmail.com>"
-  :depends-on ("cltpt" "local-time" "lem/core" "lem-transient" "lem-vi-mode")
+  :depends-on ("cltpt" "local-time" "lem/core" "lem-transient" "lem-vi-mode" "uiop")
   :components ((:module "utils"
                 :pathname "src/"
                 :components ((:file "utils")))
@@ -28,6 +28,10 @@
                 :pathname "src/"
                 :depends-on ("organ-mode" "calendar" "agenda")
                 :components ((:file "organ")))
+               (:module "capture"
+                :pathname "src/"
+                :depends-on ("organ")
+                :components ((:file "capture")))
                (:module "publish"
                 :pathname "src/"
                 :depends-on ("organ")
