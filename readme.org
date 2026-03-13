@@ -4,7 +4,9 @@
 
 * documentation
 
-see https://mahmoodsh.com/organ-mode.html
+for a quickstart: https://mahmoodsh.com/organ-mode_quickstart.html
+
+for docs: https://mahmoodsh.com/organ-mode.html
 
 * emphasized ideas and goals
 
