@@ -100,18 +100,27 @@
 (lem:define-command roam-find () ()
   (if *organ-files*
       (let* ((rmr (cltpt/roam:roamer-from-files *organ-files*))
+             (titled-nodes
+               (remove-if-not #'cltpt/roam:node-title (cltpt/roam:roamer-nodes rmr)))
+             (type-width
+               (loop for node in titled-nodes
+                     when (cltpt/roam:node-text-obj node)
+                       maximize (length (symbol-name
+                                         (class-name
+                                          (class-of
+                                           (cltpt/roam:node-text-obj node)))))))
              (items
-               (loop for node in (cltpt/roam:roamer-nodes rmr)
-                     when (cltpt/roam:node-title node)
-                       collect (if (cltpt/roam:node-text-obj node)
-                                   (lem/completion-mode:make-completion-item
-                                    :label (cltpt/roam:node-title node)
-                                    :detail (symbol-name
-                                             (class-name
-                                              (class-of
-                                               (cltpt/roam:node-text-obj node)))))
-                                   (lem/completion-mode:make-completion-item
-                                    :label (cltpt/roam:node-title node)))))
+               (loop for node in titled-nodes
+                     collect (lem/completion-mode:make-completion-item
+                              :label (cltpt/roam:node-title node)
+                              :detail (format nil "~v@<~@[~A~]~>  ~A"
+                                              type-width
+                                              (when (cltpt/roam:node-text-obj node)
+                                                (symbol-name
+                                                 (class-name
+                                                  (class-of
+                                                   (cltpt/roam:node-text-obj node)))))
+                                              (file-namestring (cltpt/roam:node-file node))))))
              (choice-str
                (lem:prompt-for-string
                 "roam-find (node) "
@@ -125,9 +134,14 @@
                                    items
                                    :key #'lem/completion-mode:completion-item-label
                                    :test #'string=))
-             (choice (elt (cltpt/roam:roamer-nodes rmr) choice-idx))
-             (dest-file (cltpt/roam:node-file choice)))
-        (lem:find-file dest-file))
+             (choice (elt titled-nodes choice-idx))
+             (dest-file (cltpt/roam:node-file choice))
+             (text-obj (cltpt/roam:node-text-obj choice)))
+        (let ((buffer (lem:find-file-buffer dest-file)))
+          (lem:switch-to-buffer buffer)
+          (when text-obj
+            (lem:move-to-position (lem:current-point)
+                                  (1+ (cltpt/base:text-object-begin-in-root text-obj))))))
       (lem:message "you must customize *organ-files* first.")))
 
 (lem:define-command agenda-open () ()
