@@ -90,7 +90,7 @@
     (:keymap
      :description "roam actions"
      (:key "r" :suffix 'roam-find :description "browse nodes")
-     (:key "l" :suffix 'test :description "list nodes"))
+     (:key "l" :suffix 'test :description "list nodes" :active-p nil))
     (:keymap
      :description "roam options"
      (:key "f" :suffix 'test :description "roam files (not yet implemented)" :active-p nil)))))

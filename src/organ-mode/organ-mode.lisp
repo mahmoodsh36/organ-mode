@@ -42,8 +42,8 @@ when nil, it will only reformat the table and the cursor will remain in the last
              :suffix (lambda ()
                        (convert-to-buffer cltpt:*latex*))
              :description "export to latex buffer")
-            (:key "p" :suffix 'test :description "export to pdf")
-            (:key "o" :suffix 'test :description "export to latex file, convert to pdf, open the pdf.")))
+            (:key "p" :active-p nil :suffix 'test :description "export to pdf")
+            (:key "o" :active-p nil :suffix 'test :description "export to latex file, convert to pdf, open the pdf.")))
   (:key "h"
    :description "html export dispatch"
    :suffix (:keymap
@@ -57,7 +57,7 @@ when nil, it will only reformat the table and the cursor will remain in the last
              :suffix (lambda ()
                        (convert-to-buffer cltpt:*html*))
              :description "export to html buffer")
-            (:key "o" :suffix 'test :description "export to html file, open it."))))
+            (:key "o" :active-p nil :suffix 'test :description "export to html file, open it."))))
 
 (define-prefix *swap-up-prefix*
   :key "M-k"
