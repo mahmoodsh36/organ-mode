@@ -58,7 +58,8 @@
   (:key "C-c C-d" :suffix 'agenda-deadline)
   (:key "C-c C-t" :suffix 'agenda-mode-change-task-state))
 
-(lem:define-key organ/organ-mode:*organ-mode-keymap* "C-c C-t" 'agenda-mode-change-task-state)
+(lem/transient:define-transient-key organ/organ-mode:*organ-mode-keymap* "C-c C-t"
+  (list :suffix ''agenda-mode-change-task-state))
 
 (lem:define-major-mode agenda-mode organ/outline-mode:outline-mode
   (:name "agenda-mode"
