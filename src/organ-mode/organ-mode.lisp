@@ -823,31 +823,189 @@ swaps only the content portion, keeping bullets and indentation in place."
              (1- pos)
              type))))))
 
+(defun pos-on-first-line-of-obj-p (obj pos)
+  "return T if POS is on the first line of OBJ."
+  (let* ((begin (cltpt/base:text-object-begin-in-root obj))
+         (text (cltpt/base:text-object-text obj))
+         (nl (position #\newline text)))
+    (and (>= pos begin)
+         (< pos (+ begin (or nl (length text)))))))
+
+(defun pos-on-last-line-of-obj-p (obj pos)
+  "return T if POS is on the last content line of OBJ. skips a trailing newline if present."
+  (let* ((begin (cltpt/base:text-object-begin-in-root obj))
+         (text (cltpt/base:text-object-text obj))
+         (trail (if (and (> (length text) 0)
+                         (char= (char text (1- (length text))) #\newline))
+                    1 0))
+         (search-end (- (length text) trail))
+         (last-nl (position #\newline text :end search-end :from-end t)))
+    (and last-nl
+         (>= pos (+ begin last-nl 1))
+         (< pos (+ begin search-end)))))
+
+(defun find-header-at-title-line ()
+  "return the org-header under the cursor if the cursor is on its title line, else return nil."
+  (let ((pos (organ/utils:current-pos))
+        (header (find-node-at-current-pos 'cltpt/org-mode:org-header)))
+    (when (and header (pos-on-first-line-of-obj-p header pos))
+      header)))
+
+(defun find-block-at-delimiter-line ()
+  "return the org-block or org-src-block under the cursor if on its opening or closing delimiter line."
+  (let ((pos (organ/utils:current-pos))
+        (blk (or (find-node-at-current-pos 'cltpt/org-mode:org-src-block)
+                 (find-node-at-current-pos 'cltpt/org-mode:org-block))))
+    (when (and blk
+               (or (pos-on-first-line-of-obj-p blk pos)
+                   (pos-on-last-line-of-obj-p blk pos)))
+      blk)))
+
+(defun swap-text-objects (obj-a obj-b)
+  "swap the buffer text of OBJ-A and OBJ-B."
+  (let* ((buf     (lem:current-buffer))
+         (begin-a (1+ (cltpt/base:text-object-begin-in-root obj-a)))
+         (end-a   (1+ (cltpt/base:text-object-end-in-root obj-a)))
+         (begin-b (1+ (cltpt/base:text-object-begin-in-root obj-b)))
+         (end-b   (1+ (cltpt/base:text-object-end-in-root obj-b)))
+         (text-a  (cltpt/base:text-object-text obj-a))
+         (text-b  (cltpt/base:text-object-text obj-b)))
+    ;; replace the later region first to keep offsets valid.
+    (if (< begin-a begin-b)
+        (progn
+          (organ/utils:replace-text-between-positions buf begin-b end-b text-a)
+          (organ/utils:replace-text-between-positions buf begin-a end-a text-b))
+        (progn
+          (organ/utils:replace-text-between-positions buf begin-a end-a text-b)
+          (organ/utils:replace-text-between-positions buf begin-b end-b text-a)))))
+
+(defun org-header-move (header direction)
+  "move HEADER up (DIRECTION=-1) or down (+1) past the adjacent same-level sibling.
+swaps full subtrees (including body text and sub-headers)."
+  (let* ((parent   (cltpt/base:text-object-parent header))
+         (level    (cltpt/base:text-object-property header :level))
+         (siblings (when parent
+                     (sort (remove-if-not
+                            (lambda (c)
+                              (and (typep c 'cltpt/org-mode:org-header)
+                                   (= (cltpt/base:text-object-property c :level) level)))
+                            (cltpt/base:text-object-children parent))
+                           #'<
+                           :key #'cltpt/base:text-object-begin-in-root)))
+         (idx        (position header siblings))
+         (target-idx (when idx
+                       (+ idx direction)))
+         (target     (when (and target-idx
+                                (>= target-idx 0)
+                                (< target-idx (length siblings)))
+                       (nth target-idx siblings))))
+    (when target
+      (let* ((earlier      (if (< idx target-idx) header target))
+             (later        (if (< idx target-idx) target header))
+             (region-start (cltpt/base:text-object-begin-in-root earlier))
+             (split        (cltpt/base:text-object-begin-in-root later))
+             (buf          (lem:current-buffer))
+             (buf-text     (lem:buffer-text buf))
+             (region-end   (cltpt/base:text-object-end-in-root later))
+             ;; TODO: its not a good idea to run subseq all the time
+             (text-earlier (subseq buf-text region-start split))
+             (text-later   (subseq buf-text split region-end))
+             (at-buffer-end (= region-end (length buf-text)))
+             ;; when at buffer end, text-later moves to middle (gains separator
+             ;; newline) and text-earlier moves to end (loses separator newline).
+             ;; add one newline after text-later, strip one trailing \n from
+             ;; text-earlier.
+             (earlier-for-swap
+               (if (and at-buffer-end
+                        (> (length text-earlier) 0)
+                        (char= (char text-earlier (1- (length text-earlier)))
+                               #\newline))
+                   (subseq text-earlier 0 (1- (length text-earlier)))
+                   text-earlier))
+             (replacement (if at-buffer-end
+                              (concatenate 'string
+                                           text-later
+                                           (string #\newline)
+                                           earlier-for-swap)
+                              (concatenate 'string text-later text-earlier)))
+             (new-pos (if (= direction 1)
+                          (+ region-start (length text-later) (if at-buffer-end 1 0))
+                          region-start))
+             (start-point  (organ/utils:char-offset-to-point buf region-start))
+             (end-point    (if at-buffer-end
+                               (lem:copy-point (lem:buffer-end-point buf) :temporary)
+                               (organ/utils:char-offset-to-point buf region-end))))
+        (lem:delete-between-points start-point end-point)
+        (lem:insert-string start-point replacement)
+        (lem:move-point (lem:current-point)
+                        (organ/utils:char-offset-to-point buf new-pos))))))
+
+(defun org-block-move (blk direction)
+  (let* ((parent   (cltpt/base:text-object-parent blk))
+         (siblings (when parent
+                     (sort (remove-if-not
+                            (lambda (c)
+                              (or (typep c 'cltpt/org-mode:org-block)
+                                  (typep c 'cltpt/org-mode:org-src-block)))
+                            (cltpt/base:text-object-children parent))
+                           #'<
+                           :key #'cltpt/base:text-object-begin-in-root)))
+         (idx        (position blk siblings))
+         (target-idx (when idx (+ idx direction)))
+         (target     (when (and target-idx
+                                (>= target-idx 0)
+                                (< target-idx (length siblings)))
+                       (nth target-idx siblings))))
+    (when target
+      (let* ((begin-target (cltpt/base:text-object-begin-in-root target))
+             (len-blk (length (cltpt/base:text-object-text blk)))
+             (len-target (length (cltpt/base:text-object-text target)))
+             ;; when moving down the second (earlier) replacement shifts the block's
+             ;; new position by (len-target - len-block).
+             (new-pos (if (= direction 1)
+                          (+ begin-target (- len-target len-block))
+                          begin-target)))
+        (swap-text-objects blk target)
+        (lem:move-point (lem:current-point)
+                        (organ/utils:char-offset-to-point (lem:current-buffer) new-pos))))))
+
 (defmethod prefix-active-p ((p (eql *swap-up-prefix*)))
-  (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table))
-        (list-found (find-node-at-current-pos 'cltpt/org-mode:org-list)))
-    (or table-found list-found)))
+  (let ((table-found  (find-node-at-current-pos 'cltpt/org-mode:org-table))
+        (list-found   (find-node-at-current-pos 'cltpt/org-mode:org-list))
+        (header-found (find-header-at-title-line))
+        (block-found  (find-block-at-delimiter-line)))
+    (or table-found list-found header-found block-found)))
 
 (defmethod prefix-suffix ((p (eql *swap-up-prefix*)))
   (lambda ()
-    (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table))
-          (list-found (find-node-at-current-pos 'cltpt/org-mode:org-list)))
+    (let ((table-found  (find-node-at-current-pos 'cltpt/org-mode:org-table))
+          (list-found   (find-node-at-current-pos 'cltpt/org-mode:org-list))
+          (header-found (find-header-at-title-line))
+          (block-found  (find-block-at-delimiter-line)))
       (cond
-        (table-found (org-table-move-row table-found -1))
-        (list-found (org-list-move-item list-found -1))))))
+        (table-found  (org-table-move-row table-found -1))
+        (list-found   (org-list-move-item list-found -1))
+        (header-found (org-header-move header-found -1))
+        (block-found  (org-block-move block-found -1))))))
 
 (defmethod prefix-active-p ((p (eql *swap-down-prefix*)))
-  (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table))
-        (list-found (find-node-at-current-pos 'cltpt/org-mode:org-list)))
-    (or table-found list-found)))
+  (let ((table-found  (find-node-at-current-pos 'cltpt/org-mode:org-table))
+        (list-found   (find-node-at-current-pos 'cltpt/org-mode:org-list))
+        (header-found (find-header-at-title-line))
+        (block-found  (find-block-at-delimiter-line)))
+    (or table-found list-found header-found block-found)))
 
 (defmethod prefix-suffix ((p (eql *swap-down-prefix*)))
   (lambda ()
-    (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table))
-          (list-found (find-node-at-current-pos 'cltpt/org-mode:org-list)))
+    (let ((table-found  (find-node-at-current-pos 'cltpt/org-mode:org-table))
+          (list-found   (find-node-at-current-pos 'cltpt/org-mode:org-list))
+          (header-found (find-header-at-title-line))
+          (block-found  (find-block-at-delimiter-line)))
       (cond
-        (table-found (org-table-move-row table-found 1))
-        (list-found (org-list-move-item list-found 1))))))
+        (table-found  (org-table-move-row table-found 1))
+        (list-found   (org-list-move-item list-found 1))
+        (header-found (org-header-move header-found 1))
+        (block-found  (org-block-move block-found 1))))))
 
 (defmethod prefix-active-p ((p (eql *swap-left-prefix*)))
   (find-node-at-current-pos 'cltpt/org-mode:org-table))
