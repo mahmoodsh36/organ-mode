@@ -27,6 +27,18 @@
 
 when nil, it will only reformat the table and the cursor will remain in the last cell.")
 
+(lem:define-command organ-export-to-latex-file () ()
+  (convert-to-file cltpt:*latex*))
+
+(lem:define-command organ-export-to-latex-buffer () ()
+  (convert-to-buffer cltpt:*latex*))
+
+(lem:define-command organ-export-to-html-file () ()
+  (convert-to-file cltpt:*html*))
+
+(lem:define-command organ-export-to-html-buffer () ()
+  (convert-to-buffer cltpt:*html*))
+
 (define-transient *organ-mode-export-keymap*
   :display-style :row
   :description "organ-mode export keymap"
@@ -37,12 +49,10 @@ when nil, it will only reformat the table and the cursor will remain in the last
             :display-style :column
             :description "organ-mode latex export"
             (:key "l"
-             :suffix (lambda ()
-                       (convert-to-file cltpt:*latex*))
+             :suffix 'organ-export-to-latex-file
              :description "export to latex file")
             (:key "L"
-             :suffix (lambda ()
-                       (convert-to-buffer cltpt:*latex*))
+             :suffix 'organ-export-to-latex-buffer
              :description "export to latex buffer")
             (:key "p" :active-p nil :suffix 'test :description "export to pdf")
             (:key "o" :active-p nil :suffix 'test :description "export to latex file, convert to pdf, open the pdf.")))
@@ -52,12 +62,10 @@ when nil, it will only reformat the table and the cursor will remain in the last
             :display-style :column
             :description "organ-mode html export"
             (:key "h"
-             :suffix (lambda ()
-                       (convert-to-file cltpt:*html*))
+             :suffix 'organ-export-to-html-file
              :description "export to html file")
             (:key "H"
-             :suffix (lambda ()
-                       (convert-to-buffer cltpt:*html*))
+             :suffix 'organ-export-to-html-buffer
              :description "export to html buffer")
             (:key "o" :active-p nil :suffix 'test :description "export to html file, open it."))))
 
