@@ -74,7 +74,9 @@ when nil, it will only reformat the table and the cursor will remain in the last
   (:key "C-c C-d" :suffix 'organ-deadline)
   (:key "C-c C-v C-n" :suffix 'organ-next-src-block)
   (:key "C-c C-v C-p" :suffix 'organ-prev-src-block)
-  (:key "C-c C-e" :suffix *organ-mode-export-keymap* :description "export dispatch"))
+  (:key "C-c C-e" :suffix *organ-mode-export-keymap* :description "export dispatch")
+  (:key "C-c C-o" :suffix 'organ-open-at-point)
+  )
 
 (defvar *organ-mode-hook*
   '((organ-mode-init-all . 0)))
