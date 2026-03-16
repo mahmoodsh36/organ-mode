@@ -72,34 +72,42 @@
 (defmethod prefix-active-p ((p (eql *swap-up-prefix*)))
   (vertical-move-context))
 
+(lem:define-command organ-dwim-move-up () ()
+  (vertical-move -1))
+
 (defmethod prefix-suffix ((p (eql *swap-up-prefix*)))
-  (lambda ()
-    (vertical-move -1)))
+  'organ-dwim-move-up)
 
 (defmethod prefix-active-p ((p (eql *swap-down-prefix*)))
   (vertical-move-context))
 
+(lem:define-command organ-dwim-move-down () ()
+  (vertical-move 1))
+
 (defmethod prefix-suffix ((p (eql *swap-down-prefix*)))
-  (lambda ()
-    (vertical-move 1)))
+  'organ-dwim-move-down)
 
 (defmethod prefix-active-p ((p (eql *swap-left-prefix*)))
   (find-node-at-current-pos 'cltpt/org-mode:org-table))
 
+(lem:define-command organ-dwim-move-left () ()
+  (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table)))
+    (when table-found
+      (org-table-move-column table-found -1))))
+
 (defmethod prefix-suffix ((p (eql *swap-left-prefix*)))
-  (lambda ()
-    (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table)))
-      (when table-found
-        (org-table-move-column table-found -1)))))
+  'organ-dwim-move-left)
 
 (defmethod prefix-active-p ((p (eql *swap-right-prefix*)))
   (find-node-at-current-pos 'cltpt/org-mode:org-table))
 
+(lem:define-command organ-dwim-move-right () ()
+  (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table)))
+    (when table-found
+      (org-table-move-column table-found 1))))
+
 (defmethod prefix-suffix ((p (eql *swap-right-prefix*)))
-  (lambda ()
-    (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table)))
-      (when table-found
-        (org-table-move-column table-found 1)))))
+  'organ-dwim-move-right)
 
 (defmethod prefix-active-p ((p (eql *return-prefix*)))
   (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table))
@@ -110,25 +118,31 @@
 (defmethod prefix-active-p ((p (eql *tab-prefix*)))
   (find-node-at-current-pos 'cltpt/org-mode:org-table))
 
+(lem:define-command organ-dwim-tab () ()
+  (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table)))
+    (when table-found
+      (org-table-navigate table-found 1 0))))
+
 (defmethod prefix-suffix ((p (eql *tab-prefix*)))
-  (lambda ()
-    (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table)))
-      (when table-found
-        (org-table-navigate table-found 1 0)))))
+  'organ-dwim-tab)
 
 (defmethod prefix-active-p ((p (eql *shift-tab-prefix*)))
   (find-node-at-current-pos 'cltpt/org-mode:org-table))
 
+(lem:define-command organ-dwim-shift-tab () ()
+  (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table)))
+    (when table-found
+      (org-table-navigate table-found -1 0))))
+
 (defmethod prefix-suffix ((p (eql *shift-tab-prefix*)))
-  (lambda ()
-    (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table)))
-      (when table-found
-        (org-table-navigate table-found -1 0)))))
+  'organ-dwim-shift-tab)
+
+(lem:define-command organ-dwim-return () ()
+  (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table))
+        (list-found (find-node-at-current-pos 'cltpt/org-mode:org-list)))
+    (cond
+      (table-found (org-table-navigate table-found 0 1))
+      (list-found (org-list-newline list-found)))))
 
 (defmethod prefix-suffix ((p (eql *return-prefix*)))
-  (lambda ()
-    (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table))
-          (list-found (find-node-at-current-pos 'cltpt/org-mode:org-list)))
-      (cond
-        (table-found (org-table-navigate table-found 0 1))
-        (list-found (org-list-newline list-found))))))
+  'organ-dwim-return)
