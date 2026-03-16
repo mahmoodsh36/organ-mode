@@ -18,8 +18,13 @@
                 :pathname "src/organ-mode/"
                 :depends-on ("utils" "calendar")
                 :components ((:file "organ-mode")
+                             (:file "utils")
+                             (:file "highlighting")
+                             (:file "org-list")
+                             (:file "nav")
                              (:file "move")
-                             (:file "highlighting")))
+                             (:file "dwim")
+                             ))
                (:module "agenda"
                 :pathname "src/agenda-mode/"
                 :depends-on ("utils" "outline-mode" "organ-mode")

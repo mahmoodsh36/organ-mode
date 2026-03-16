@@ -61,52 +61,6 @@ when nil, it will only reformat the table and the cursor will remain in the last
              :description "export to html buffer")
             (:key "o" :active-p nil :suffix 'test :description "export to html file, open it."))))
 
-(define-prefix *swap-up-prefix*
-  :key "M-k"
-  :behavior :drop
-  :description "swap up (element-specific)")
-
-(define-prefix *swap-down-prefix*
-  :key "M-j"
-  :behavior :drop
-  :description "swap down (element-specific)")
-
-(define-prefix *swap-right-prefix*
-  :key "M-l"
-  :behavior :drop
-  :description "swap right (element-specific)")
-
-(define-prefix *swap-left-prefix*
-  :key "M-h"
-  :behavior :drop
-  :description "swap left (element-specific)")
-
-;; this doesnt work properly yet, vi-mode's normal-mode return key takes priority over it.
-(define-prefix *return-prefix*
-  :key "Return"
-  :behavior :drop
-  :description "context-sensitive return")
-
-(define-prefix *tab-prefix*
-  :key "Tab"
-  :behavior :drop
-  :description "context-sensitive tab")
-
-(define-prefix *shift-tab-prefix*
-  :key "Shift-Tab"
-  :behavior :drop
-  :description "context-sensitive shift-tab")
-
-(define-transient *organ-dwim-keymap*
-  :description "dwim keymap"
-  *swap-up-prefix*
-  *swap-down-prefix*
-  *swap-right-prefix*
-  *swap-left-prefix*
-  *return-prefix*
-  *tab-prefix*
-  *shift-tab-prefix*)
-
 (define-transient *organ-mode-keymap*
   :display-style :row
   :description "organ-mode keymap"
@@ -120,8 +74,7 @@ when nil, it will only reformat the table and the cursor will remain in the last
   (:key "C-c C-d" :suffix 'organ-deadline)
   (:key "C-c C-v C-n" :suffix 'organ-next-src-block)
   (:key "C-c C-v C-p" :suffix 'organ-prev-src-block)
-  (:key "C-c C-e" :suffix *organ-mode-export-keymap* :description "export dispatch")
-  *organ-dwim-keymap*)
+  (:key "C-c C-e" :suffix *organ-mode-export-keymap* :description "export dispatch"))
 
 (defvar *organ-mode-hook*
   '((organ-mode-init-all . 0)))
@@ -172,72 +125,6 @@ when nil, it will only reformat the table and the cursor will remain in the last
 (defun current-tree ()
   (lem:buffer-value (lem:current-buffer) 'cltpt-tree))
 
-(defmethod object-closest-to-pos ((tree cltpt/base:text-object)
-                                  pos
-                                  direction
-                                  &optional (predicate (lambda (&rest args) t)))
-  "finds the text object closest to POS in DIRECTION (:forward or :backward).
-for :forward, finds the object starting closest after POS.
-for :backward, finds the object starting closest before POS."
-  (let ((prune-test (ecase direction
-                      (:forward #'<=)
-                      (:backward #'>=)))
-        (candidate-test (ecase direction
-                          (:forward #'>)
-                          (:backward #'<)))
-        (better-test (ecase direction
-                       (:forward #'<)
-                       (:backward #'>)))
-        (prune-accessor (ecase direction
-                          (:forward #'cltpt/base:text-object-end-in-root)
-                          (:backward #'cltpt/base:text-object-begin-in-root))))
-    ;; prune: if the entire object is on the wrong side of pos, skip this branch.
-    (when (funcall prune-test (funcall prune-accessor tree) pos)
-      (return-from object-closest-to-pos nil))
-    (let ((best-candidate))
-      (when (and (funcall candidate-test (cltpt/base:text-object-begin-in-root tree) pos)
-                 (funcall predicate tree))
-        (setf best-candidate tree))
-      (loop for child in (cltpt/base:text-object-children tree)
-            do (let ((candidate (object-closest-to-pos child pos direction predicate)))
-                 (when candidate
-                   (if (or (null best-candidate)
-                           (funcall better-test
-                                    (cltpt/base:text-object-begin-in-root candidate)
-                                    (cltpt/base:text-object-begin-in-root best-candidate)))
-                       (setf best-candidate candidate)))))
-      best-candidate)))
-
-(lem:define-command organ-next-element () ()
-  (organ-move-to-element :forward))
-
-(lem:define-command organ-prev-element () ()
-  (organ-move-to-element :backward))
-
-(lem:define-command organ-next-header () ()
-  (organ-move-to-element :forward (lambda (obj) (typep obj 'cltpt/org-mode:org-header))))
-
-(lem:define-command organ-prev-header () ()
-  (organ-move-to-element :backward (lambda (obj) (typep obj 'cltpt/org-mode:org-header))))
-
-(lem:define-command organ-next-link () ()
-  (organ-move-to-element :forward (lambda (obj) (typep obj 'cltpt/org-mode:org-link))))
-
-(lem:define-command organ-prev-link () ()
-  (organ-move-to-element :backward (lambda (obj) (typep obj 'cltpt/org-mode:org-link))))
-
-(lem:define-command organ-next-src-block () ()
-  (organ-move-to-element :forward (lambda (obj) (typep obj 'cltpt/org-mode:org-src-block))))
-
-(lem:define-command organ-prev-src-block () ()
-  (organ-move-to-element :backward (lambda (obj) (typep obj 'cltpt/org-mode:org-src-block))))
-
-(lem:define-command organ-next-block () ()
-  (organ-move-to-element :forward (lambda (obj) (typep obj 'cltpt/org-mode:org-block))))
-
-(lem:define-command organ-prev-block () ()
-  (organ-move-to-element :backward (lambda (obj) (typep obj 'cltpt/org-mode:org-block))))
-
 ;; this used calendar-mode.lisp directly instead of the popup
 ;; (lem:define-command edit-timestamp () ()
 ;;   "edit the timestamp at the cursor using `calendar-mode'."
@@ -287,7 +174,7 @@ for :backward, finds the object starting closest before POS."
               (lem:message "replaced ~A with ~A" (cltpt/base:text-object-text obj) new-date))
             (lem:insert-string pt (organ/utils:format-timestamp new-date)))))))
 
-(defun organ-set-action-timestamp (action header source-buffer record-type log-keyword)
+(defun set-action-timestamp (action header source-buffer record-type log-keyword)
   "prompt for a date and insert/update an ACTION (e.g., SCHEDULED, DEADLINE) timestamp under the HEADER."
   (let ((new-date (organ/popup-calendar:popup-calendar-prompt
                    (format nil "~A date: " action))))
@@ -340,7 +227,7 @@ for :backward, finds the object starting closest before POS."
         (source-buffer (lem:current-buffer)))
     (if (not header)
         (lem:editor-error "not inside an org-header.")
-        (organ-set-action-timestamp
+        (set-action-timestamp
          "SCHEDULED"
          header
          source-buffer
@@ -356,7 +243,7 @@ for :backward, finds the object starting closest before POS."
         (source-buffer (lem:current-buffer)))
     (if (not header)
         (lem:editor-error "not inside an org-header.")
-        (organ-set-action-timestamp
+        (set-action-timestamp
          "DEADLINE"
          header
          source-buffer
@@ -383,206 +270,6 @@ for :backward, finds the object starting closest before POS."
             (lem:find-file dest-filepath)
             (lem:editor-error "file ~A doesnt exist" dest-filepath))))))
 
-(defmethod org-table-navigate ((text-obj cltpt/org-mode:org-table) x-shift y-shift)
-  (let* ((match (cltpt/base:text-object-match text-obj))
-         (table-str (cltpt/base:text-object-match-text text-obj match))
-         (initial-pos (organ/utils:current-pos))
-         (table-start-pos (cltpt/combinator:match-begin-absolute match))
-         (cell (cltpt/tree:tree-find-if
-                match
-                (lambda (submatch)
-                  (and (>= (1+ initial-pos) (cltpt/combinator:match-begin-absolute submatch))
-                       (<= initial-pos (cltpt/combinator:match-end-absolute submatch))
-                       (string= (cltpt/combinator:match-id submatch) 'table-cell)))))
-         (effective-cell (or cell
-                             (let ((best))
-                               (cltpt/tree:tree-walk
-                                match
-                                (lambda (submatch)
-                                  (when (and (>= (1+ initial-pos)
-                                                 (cltpt/combinator:match-begin-absolute submatch))
-                                             (string= (cltpt/combinator:match-id submatch)
-                                                      'table-cell))
-                                    (setf best submatch))))
-                               best))))
-    (if (not effective-cell)
-        ;; if no cell found anywhere, just reformat and don't move the cursor.
-        (let ((new-table-str (cltpt/org-mode:reformat-table table-str match)))
-          (organ/utils:replace-submatch-text* (lem:current-buffer) match new-table-str))
-        (let* ((current-coords (cltpt/org-mode:get-cell-coordinates effective-cell))
-               (new-table-str (cltpt/org-mode:reformat-table table-str match)))
-          (multiple-value-bind (new-table-match pos)
-              (cltpt/org-mode:org-table-matcher
-               nil
-               (cltpt/reader:reader-from-string new-table-str)
-               0)
-            (let* ((width (cltpt/org-mode:get-table-width new-table-match))
-                   (height (cltpt/org-mode:get-table-height new-table-match))
-                   (current-linear (+ (* (cdr current-coords) width) (car current-coords)))
-                   (raw-shift (+ x-shift (* y-shift width)))
-                   (shift-linear (if (and (null cell) (< raw-shift 0))
-                                     0
-                                     raw-shift))
-                   (target-linear (max 0 (+ current-linear shift-linear)))
-                   (new-x (mod target-linear width))
-                   (new-y (floor target-linear width))
-                   ;; extend table if moving past last row, otherwise reuse
-                   (final-table-str
-                     (if (>= new-y height)
-                         (cltpt/org-mode:list-to-table-string
-                          (append (cltpt/org-mode:table-match-to-list
-                                   new-table-str
-                                   new-table-match)
-                                  (loop repeat (- new-y (1- height))
-                                        collect (loop repeat width collect ""))))
-                         new-table-str))
-                   (final-match
-                     (if (string= final-table-str new-table-str)
-                         new-table-match
-                         (cltpt/org-mode:org-table-matcher
-                          nil
-                          (cltpt/reader:reader-from-string final-table-str)
-                          0)))
-                   (final-height (cltpt/org-mode:get-table-height final-match))
-                   (target-coords (cons new-x (min new-y (1- final-height))))
-                   (target-cell (cltpt/org-mode:get-cell-at-coordinates
-                                 final-match
-                                 target-coords))
-                   (cursor-pos (if target-cell
-                                   (+ table-start-pos
-                                      (cltpt/combinator:match-begin-absolute target-cell)
-                                      1)
-                                   table-start-pos)))
-              (organ/utils:replace-submatch-text* (lem:current-buffer) match final-table-str)
-              (lem:move-point (lem:current-point)
-                              (organ/utils:char-offset-to-point (lem:current-buffer)
-                                                                cursor-pos))))))))
-
-(defun list-item-info (list-obj)
-  "extract bullet info from the parsed tree for the list-item at point. returns (values indent bullet-str prev-bullet-str) or nil."
-  (let* ((match (cltpt/base:text-object-match list-obj))
-         (buf-text (lem:buffer-text (lem:current-buffer)))
-         (pos (organ/utils:current-pos))
-         (items (cltpt/combinator:match-children match)))
-    (loop for item in items
-          for i from 0
-          when (and (<= (cltpt/combinator:match-begin-absolute item) pos)
-                    (<= pos (cltpt/combinator:match-end-absolute item)))
-            return
-            (let* ((bullet-node (cltpt/combinator/match:find-direct-match-child-by-id
-                                 item
-                                 'cltpt/org-mode::list-item-bullet))
-                   (bullet-str (when bullet-node
-                                 (cltpt/combinator:match-text bullet-node buf-text)))
-                   (indent (or (getf (cltpt/combinator:match-props item) :indent) 0))
-                   (prev-item (when (> i 0)
-                                (nth (1- i) items)))
-                   (prev-bullet-node (when prev-item
-                                       (cltpt/combinator/match:find-direct-match-child-by-id
-                                        prev-item
-                                        'cltpt/org-mode::list-item-bullet)))
-                   (prev-bullet-str (when prev-bullet-node
-                                      (cltpt/combinator:match-text prev-bullet-node buf-text))))
-              (values indent bullet-str prev-bullet-str)))))
-
-(defun bullet-marker (bullet)
-  "extract the marker part of a bullet (everything before the trailing dot). returns nil for unordered bullets."
-  (when (and (> (length bullet) 1)
-             (char= (char bullet (1- (length bullet))) #\.))
-    (subseq bullet 0 (1- (length bullet)))))
-
-(defvar *roman-values*
-  '((1000 "m") (900 "cm") (500 "d") (400 "cd")
-    (100 "c") (90 "xc") (50 "l") (40 "xl")
-    (10 "x") (9 "ix") (5 "v") (4 "iv") (1 "i"))
-  "roman numeral value-to-string mapping, descending order.")
-
-(defvar *roman-char-values*
-  (loop for (val str) in *roman-values*
-        when (= (length str) 1)
-          collect (cons (char str 0) val))
-  "char-to-value alist derived from `*roman-values*'.")
-
-(defun roman-char-value (ch)
-  (cdr (assoc (char-downcase ch) *roman-char-values*)))
-
-(defun roman-to-int (str)
-  "parse a roman numeral string. returns the integer value or nil."
-  (when (zerop (length str))
-    (return-from roman-to-int nil))
-  (let ((total 0)
-        (prev 0))
-    (loop for i from (1- (length str)) downto 0
-          for val = (roman-char-value (char str i))
-          do (unless val
-               (return-from roman-to-int nil))
-             (if (< val prev)
-                 (decf total val)
-                 (incf total val))
-             (setf prev val))
-    total))
-
-(defun int-to-roman (n &optional uppercase)
-  "convert integer to a roman numeral string."
-  (let ((result (with-output-to-string (s)
-                  (dolist (pair *roman-values*)
-                    (loop while (>= n (first pair))
-                          do (write-string (second pair) s)
-                             (decf n (first pair)))))))
-    (if uppercase
-        (string-upcase result)
-        result)))
-
-(defun alphabetic-successor-p (marker prev-marker)
-  "true if MARKER is the single-char alphabetic successor of PREV-MARKER."
-  (and prev-marker
-       (= (length marker) 1)
-       (= (length prev-marker) 1)
-       (char= (char marker 0)
-              (code-char (1+ (char-code (char prev-marker 0)))))))
-
-(defun increment-marker (marker prev-marker)
-  "return the next marker string, using PREV-MARKER to disambiguate roman vs alphabetic."
-  (let ((num (ignore-errors (parse-integer marker))))
-    (cond
-      (num (format nil "~A" (1+ num)))
-      ;; single-char that's both roman and alpha: check context
-      ((and (= (length marker) 1)
-            (roman-to-int marker)
-            (alphabetic-successor-p marker prev-marker))
-       (string (code-char (1+ (char-code (char marker 0))))))
-      ;; roman numeral
-      ((roman-to-int marker)
-       (int-to-roman (1+ (roman-to-int marker))
-                     (upper-case-p (char marker 0))))
-      ;; alphabetic fallback
-      (t (string (code-char (1+ (char-code (char marker (1- (length marker)))))))))))
-
-(defun next-bullet (bullet &optional prev-bullet)
-  "given a bullet like \"-\", \"1.\", \"ii.\", \"a.\", return the next bullet.
-
-PREV-BULLET is used to disambiguate single-char roman vs alphabetic markers."
-  (if (string= bullet "-")
-      "-"
-      (let ((marker (bullet-marker bullet))
-            (prev-marker (bullet-marker prev-bullet)))
-        (if marker
-            (format nil "~A." (increment-marker marker prev-marker))
-            bullet))))
-
-(defun organ-list-newline (list-obj)
-  "insert a new list entry on the next line with the correct bullet and indentation.
-
-LIST-OBJ is the org-list text object at point."
-  (multiple-value-bind (indent bullet prev-bullet) (list-item-info list-obj)
-    (when (and indent bullet)
-      (let ((new-bullet (next-bullet bullet prev-bullet))
-            (indent-str (make-string indent :initial-element #\space))
-            (pt (lem:current-point)))
-        (lem:line-end pt)
-        (lem:insert-character pt #\newline)
-        (lem:insert-string pt (format nil "~A~A " indent-str new-bullet))))))
-
 (defun convert-buffer (dest-format)
   (let* ((tree (current-tree))
          (output (cltpt:convert-document cltpt/org-mode:*org-mode* dest-format tree)))
@@ -607,148 +294,3 @@ LIST-OBJ is the org-list text object at point."
     (lem:with-current-buffer buffer
       (lem-core/commands/file:revert-buffer t))
     (lem:pop-to-buffer buffer)))
-
-;; this is a special case where we also care about current_pos-1
-(defun find-node-at-current-pos (type)
-  (let ((pos (organ/utils:current-pos))
-        (tree (current-tree)))
-    ;; find enclosing element: try text-obj parent-walk first, fall back to pos-1 for
-    ;; the boundary case (end of last list item where the org-list region doesnt include
-    ;; the trailing newline).
-    (when tree
-      (or (organ/utils:find-node-at-pos
-           tree
-           pos
-           type)
-          (when (> pos 0)
-            (organ/utils:find-node-at-pos
-             tree
-             (1- pos)
-             type))))))
-
-(defun pos-on-first-line-of-obj-p (obj pos)
-  "return T if POS is on the first line of OBJ."
-  (let* ((begin (cltpt/base:text-object-begin-in-root obj))
-         (text (cltpt/base:text-object-text obj))
-         (nl (position #\newline text)))
-    (and (>= pos begin)
-         (< pos (+ begin (or nl (length text)))))))
-
-(defun pos-on-last-line-of-obj-p (obj pos)
-  "return T if POS is on the last content line of OBJ. skips a trailing newline if present."
-  (let* ((begin (cltpt/base:text-object-begin-in-root obj))
-         (text (cltpt/base:text-object-text obj))
-         (trail (if (and (> (length text) 0)
-                         (char= (char text (1- (length text))) #\newline))
-                    1
-                    0))
-         (search-end (- (length text) trail))
-         (last-nl (position #\newline text :end search-end :from-end t)))
-    (and last-nl
-         (>= pos (+ begin last-nl 1))
-         (< pos (+ begin search-end)))))
-
-(defun find-header-at-title-line ()
-  "return the org-header under the cursor if the cursor is on its title line, else return nil."
-  (let ((pos (organ/utils:current-pos))
-        (header (find-node-at-current-pos 'cltpt/org-mode:org-header)))
-    (when (and header (pos-on-first-line-of-obj-p header pos))
-      header)))
-
-(defun find-block-at-delimiter-line ()
-  "return the org-block or org-src-block under the cursor if on its opening or closing delimiter line."
-  (let ((pos (organ/utils:current-pos))
-        (blk (or (find-node-at-current-pos 'cltpt/org-mode:org-src-block)
-                 (find-node-at-current-pos 'cltpt/org-mode:org-block))))
-    (when (and blk
-               (or (pos-on-first-line-of-obj-p blk pos)
-                   (pos-on-last-line-of-obj-p blk pos)))
-      blk)))
-
-(defmethod prefix-active-p ((p (eql *swap-up-prefix*)))
-  (let ((table-found  (find-node-at-current-pos 'cltpt/org-mode:org-table))
-        (list-found   (find-node-at-current-pos 'cltpt/org-mode:org-list))
-        (header-found (find-header-at-title-line))
-        (block-found  (find-block-at-delimiter-line)))
-    (or table-found list-found header-found block-found)))
-
-(defmethod prefix-suffix ((p (eql *swap-up-prefix*)))
-  (lambda ()
-    (let ((table-found  (find-node-at-current-pos 'cltpt/org-mode:org-table))
-          (list-found   (find-node-at-current-pos 'cltpt/org-mode:org-list))
-          (header-found (find-header-at-title-line))
-          (block-found  (find-block-at-delimiter-line)))
-      (cond
-        (table-found  (org-table-move-row table-found -1))
-        (list-found   (org-list-move-item list-found -1))
-        (header-found (org-header-move header-found -1))
-        (block-found  (org-block-move block-found -1))))))
-
-(defmethod prefix-active-p ((p (eql *swap-down-prefix*)))
-  (let ((table-found  (find-node-at-current-pos 'cltpt/org-mode:org-table))
-        (list-found   (find-node-at-current-pos 'cltpt/org-mode:org-list))
-        (header-found (find-header-at-title-line))
-        (block-found  (find-block-at-delimiter-line)))
-    (or table-found list-found header-found block-found)))
-
-(defmethod prefix-suffix ((p (eql *swap-down-prefix*)))
-  (lambda ()
-    (let ((table-found  (find-node-at-current-pos 'cltpt/org-mode:org-table))
-          (list-found   (find-node-at-current-pos 'cltpt/org-mode:org-list))
-          (header-found (find-header-at-title-line))
-          (block-found  (find-block-at-delimiter-line)))
-      (cond
-        (table-found  (org-table-move-row table-found 1))
-        (list-found   (org-list-move-item list-found 1))
-        (header-found (org-header-move header-found 1))
-        (block-found  (org-block-move block-found 1))))))
-
-(defmethod prefix-active-p ((p (eql *swap-left-prefix*)))
-  (find-node-at-current-pos 'cltpt/org-mode:org-table))
-
-(defmethod prefix-suffix ((p (eql *swap-left-prefix*)))
-  (lambda ()
-    (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table)))
-      (when table-found
-        (org-table-move-column table-found -1)))))
-
-(defmethod prefix-active-p ((p (eql *swap-right-prefix*)))
-  (find-node-at-current-pos 'cltpt/org-mode:org-table))
-
-(defmethod prefix-suffix ((p (eql *swap-right-prefix*)))
-  (lambda ()
-    (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table)))
-      (when table-found
-        (org-table-move-column table-found 1)))))
-
-(defmethod prefix-active-p ((p (eql *return-prefix*)))
-  (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table))
-        (list-found (find-node-at-current-pos 'cltpt/org-mode:org-list)))
-    (or table-found
-        (and list-found (lem:end-line-p (lem:current-point))))))
-
-(defmethod prefix-active-p ((p (eql *tab-prefix*)))
-  (find-node-at-current-pos 'cltpt/org-mode:org-table))
-
-(defmethod prefix-suffix ((p (eql *tab-prefix*)))
-  (lambda ()
-    (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table)))
-      (when table-found
-        (org-table-navigate table-found 1 0)))))
-
-(defmethod prefix-active-p ((p (eql *shift-tab-prefix*)))
-  (find-node-at-current-pos 'cltpt/org-mode:org-table))
-
-(defmethod prefix-suffix ((p (eql *shift-tab-prefix*)))
-  (lambda ()
-    (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table)))
-      (when table-found
-        (org-table-navigate table-found -1 0)))))
-
-(defmethod prefix-suffix ((p (eql *return-prefix*)))
-  (lambda ()
-    (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table))
-          (list-found (find-node-at-current-pos 'cltpt/org-mode:org-list)))
-      (cond
-        (table-found (org-table-navigate table-found 0 1))
-        (list-found (organ-list-newline list-found))))))

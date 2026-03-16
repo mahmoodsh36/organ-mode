@@ -255,7 +255,7 @@
 (lem:define-command agenda-schedule () ()
   "prompt for a date and insert/update a SCHEDULED timestamp for the agenda entry at point."
   (multiple-value-bind (header source-buffer) (resolve-agenda-header-and-buffer)
-    (organ/organ-mode::organ-set-action-timestamp
+    (organ/organ-mode::set-action-timestamp
      "SCHEDULED"
      header
      source-buffer
@@ -265,7 +265,7 @@
 (lem:define-command agenda-deadline () ()
   "prompt for a date and insert/update a DEADLINE timestamp for the agenda entry at point."
   (multiple-value-bind (header source-buffer) (resolve-agenda-header-and-buffer)
-    (organ/organ-mode::organ-set-action-timestamp
+    (organ/organ-mode::set-action-timestamp
      "DEADLINE"
      header
      source-buffer
