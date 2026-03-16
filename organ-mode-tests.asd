@@ -4,4 +4,8 @@
                "organ-mode"
                "rove")
   :pathname "tests"
-  :components ((:file "tests")))
+  :serial t
+  :components ((:file "utils")
+               (:file "tests")
+               (:file "move")
+               (:file "nav")))

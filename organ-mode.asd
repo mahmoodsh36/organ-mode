@@ -18,6 +18,7 @@
                 :pathname "src/organ-mode/"
                 :depends-on ("utils" "calendar")
                 :components ((:file "organ-mode")
+                             (:file "move")
                              (:file "highlighting")))
                (:module "agenda"
                 :pathname "src/agenda-mode/"
