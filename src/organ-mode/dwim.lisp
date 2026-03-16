@@ -48,43 +48,40 @@
 
 (lem:keymap-add-child *organ-mode-keymap* *organ-dwim-keymap*)
 
+(defun vertical-move-context ()
+  (let ((table  (find-node-at-current-pos 'cltpt/org-mode:org-table))
+        (list   (find-node-at-current-pos 'cltpt/org-mode:org-list))
+        (header (find-header-at-title-line))
+        (blk  (find-block-at-delimiter-line)))
+    (cond
+      (table  (values :table table))
+      (list   (values :list list))
+      (header (values :header header))
+      (blk    (values :block blk)))))
+
+(defun vertical-move (direction)
+  "dispatch a vertical move in DIRECTION (-1 or +1) based on the element at cursor."
+  (multiple-value-bind (type element) (vertical-move-context)
+    (when type
+      (ecase type
+        (:table  (org-table-move-row element direction))
+        (:list   (org-list-move-item element direction))
+        (:header (org-header-move element direction))
+        (:block  (org-block-move element direction))))))
+
 (defmethod prefix-active-p ((p (eql *swap-up-prefix*)))
-  (let ((table-found  (find-node-at-current-pos 'cltpt/org-mode:org-table))
-        (list-found   (find-node-at-current-pos 'cltpt/org-mode:org-list))
-        (header-found (find-header-at-title-line))
-        (block-found  (find-block-at-delimiter-line)))
-    (or table-found list-found header-found block-found)))
+  (vertical-move-context))
 
 (defmethod prefix-suffix ((p (eql *swap-up-prefix*)))
   (lambda ()
-    (let ((table-found  (find-node-at-current-pos 'cltpt/org-mode:org-table))
-          (list-found   (find-node-at-current-pos 'cltpt/org-mode:org-list))
-          (header-found (find-header-at-title-line))
-          (block-found  (find-block-at-delimiter-line)))
-      (cond
-        (table-found  (org-table-move-row table-found -1))
-        (list-found   (org-list-move-item list-found -1))
-        (header-found (org-header-move header-found -1))
-        (block-found  (org-block-move block-found -1))))))
+    (vertical-move -1)))
 
 (defmethod prefix-active-p ((p (eql *swap-down-prefix*)))
-  (let ((table-found  (find-node-at-current-pos 'cltpt/org-mode:org-table))
-        (list-found   (find-node-at-current-pos 'cltpt/org-mode:org-list))
-        (header-found (find-header-at-title-line))
-        (block-found  (find-block-at-delimiter-line)))
-    (or table-found list-found header-found block-found)))
+  (vertical-move-context))
 
 (defmethod prefix-suffix ((p (eql *swap-down-prefix*)))
   (lambda ()
-    (let ((table-found  (find-node-at-current-pos 'cltpt/org-mode:org-table))
-          (list-found   (find-node-at-current-pos 'cltpt/org-mode:org-list))
-          (header-found (find-header-at-title-line))
-          (block-found  (find-block-at-delimiter-line)))
-      (cond
-        (table-found  (org-table-move-row table-found 1))
-        (list-found   (org-list-move-item list-found 1))
-        (header-found (org-header-move header-found 1))
-        (block-found  (org-block-move block-found 1))))))
+    (vertical-move 1)))
 
 (defmethod prefix-active-p ((p (eql *swap-left-prefix*)))
   (find-node-at-current-pos 'cltpt/org-mode:org-table))
