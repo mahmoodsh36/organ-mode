@@ -27,18 +27,6 @@
 
 when nil, it will only reformat the table and the cursor will remain in the last cell.")
 
-(lem:define-command organ-export-to-latex-file () ()
-  (convert-to-file cltpt:*latex*))
-
-(lem:define-command organ-export-to-latex-buffer () ()
-  (convert-to-buffer cltpt:*latex*))
-
-(lem:define-command organ-export-to-html-file () ()
-  (convert-to-file cltpt:*html*))
-
-(lem:define-command organ-export-to-html-buffer () ()
-  (convert-to-buffer cltpt:*html*))
-
 (define-transient *organ-mode-export-keymap*
   :display-style :row
   :description "organ-mode export keymap"
@@ -55,7 +43,7 @@ when nil, it will only reformat the table and the cursor will remain in the last
              :suffix 'organ-export-to-latex-buffer
              :description "export to latex buffer")
             (:key "p" :active-p nil :suffix 'test :description "export to pdf")
-            (:key "o" :active-p nil :suffix 'test :description "export to latex file, convert to pdf, open the pdf.")))
+            (:key "o" :active-p nil :suffix 'test :description "export to latex, convert to pdf, open the pdf")))
   (:key "h"
    :description "html export dispatch"
    :suffix (:keymap
@@ -67,7 +55,9 @@ when nil, it will only reformat the table and the cursor will remain in the last
             (:key "H"
              :suffix 'organ-export-to-html-buffer
              :description "export to html buffer")
-            (:key "o" :active-p nil :suffix 'test :description "export to html file, open it."))))
+            (:key "o"
+             :suffix 'organ-export-to-html-and-open
+             :description "export to html file, open it"))))
 
 (define-transient *organ-mode-keymap*
   :display-style :row
@@ -293,6 +283,8 @@ when nil, it will only reformat the table and the cursor will remain in the last
     (lem:pop-to-buffer buffer)))
 
 (defun convert-to-file (dest-format)
+  "export the current buffer to DEST-FORMAT, write to a temp file, and display it.
+returns the temp file path."
   (let* ((extension (cond ((eq dest-format cltpt:*html*) "html")
                           ((eq dest-format cltpt:*latex*) "tex")
                           (t "txt")))
@@ -303,4 +295,22 @@ when nil, it will only reformat the table and the cursor will remain in the last
     ;; make buffer re-read the stuff we wrote
     (lem:with-current-buffer buffer
       (lem-core/commands/file:revert-buffer t))
-    (lem:pop-to-buffer buffer)))
+    (lem:pop-to-buffer buffer)
+    temp-file))
+
+(lem:define-command organ-export-to-latex-file () ()
+  (convert-to-file cltpt:*latex*))
+
+(lem:define-command organ-export-to-latex-buffer () ()
+  (convert-to-buffer cltpt:*latex*))
+
+(lem:define-command organ-export-to-html-file () ()
+  (convert-to-file cltpt:*html*))
+
+(lem:define-command organ-export-to-html-buffer () ()
+  (convert-to-buffer cltpt:*html*))
+
+(lem:define-command organ-export-to-html-and-open () ()
+  "export the current buffer to html and open it externally."
+  (let ((html-file (convert-to-file cltpt:*html*)))
+    (organ/utils:open-file-externally html-file)))

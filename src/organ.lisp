@@ -1,6 +1,7 @@
 (defpackage :organ
   (:use :cl :lem :lem/transient)
-  (:export :*organ-files* :*agenda-timestamp-range* :*organ-keymap*))
+  (:export :*organ-files* :*agenda-timestamp-range* :*organ-keymap*
+           :*roam-list-nodes-format*))
 
 (in-package :organ)
 
@@ -90,7 +91,7 @@
     (:keymap
      :description "roam actions"
      (:key "r" :suffix 'roam-find :description "browse nodes")
-     (:key "l" :suffix 'test :description "list nodes" :active-p nil))
+     (:key "l" :suffix 'roam-list-nodes :description "list nodes"))
     (:keymap
      :description "roam options"
      (:key "f" :suffix 'test :description "roam files (not yet implemented)" :active-p nil)))))
@@ -142,6 +143,82 @@
           (when text-obj
             (lem:move-to-position (lem:current-point)
                                   (1+ (cltpt/base:text-object-begin-in-root text-obj))))))
+      (lem:message "you must customize *organ-files* first.")))
+
+(defvar *roam-list-nodes-format*
+  "%(getf cl-user::*file-info* :title) (%(getf cl-user::*file-info* :filename))"
+  "format string for displaying nodes in `roam-list-nodes'.
+uses `cltpt:convert-simple-format' with :title, :root-title, :id, :file, :filename, etc.")
+
+(defun find-parent-roam-node (node all-nodes-set)
+  "find the nearest ancestor of NODE's text-obj that is also a roam node in ALL-NODES-SET (a hash-table)."
+  (let ((text-obj (cltpt/roam:node-text-obj node)))
+    (when text-obj
+      (loop for parent = (cltpt/base:text-object-parent text-obj)
+              then (cltpt/base:text-object-parent parent)
+            while parent
+            do (let ((parent-node (cltpt/base:text-object-property parent :roam-node)))
+                 (when (and parent-node
+                            (gethash parent-node all-nodes-set))
+                   (return parent-node)))))))
+
+(defun build-roam-outline-forest (rmr)
+  "build a tree of outline nodes from a roamer's nodes using text-object parent relationships."
+  (let* ((nodes (cltpt/roam:roamer-nodes rmr))
+         (node-to-outline (make-hash-table :test 'eq))
+         (all-nodes-set (make-hash-table :test 'eq)))
+    ;; build lookup set
+    (dolist (node nodes)
+      (setf (gethash node all-nodes-set) t))
+    ;; create outline nodes
+    (dolist (node nodes)
+      (setf (gethash node node-to-outline)
+            (organ/outline-mode:create-outline-node
+             (cltpt/roam:node-info-format-str node *roam-list-nodes-format*)
+             :children nil)))
+    ;; build parent-child relationships
+    (let ((roots))
+      (dolist (node nodes)
+        (let* ((parent-roam-node (find-parent-roam-node node all-nodes-set))
+               (outline-node (gethash node node-to-outline))
+               (parent-outline (when parent-roam-node
+                                 (gethash parent-roam-node node-to-outline))))
+          (if parent-outline
+              (push outline-node
+                    (organ/outline-mode:outline-node-children parent-outline))
+              (push outline-node roots))))
+      ;; reverse children to preserve original order
+      (maphash
+       (lambda (key outline-node)
+         (setf (organ/outline-mode:outline-node-children outline-node)
+               (nreverse (organ/outline-mode:outline-node-children outline-node))))
+       node-to-outline)
+      (values (nreverse roots) node-to-outline))))
+
+(lem:define-command roam-list-nodes () ()
+  (if *organ-files*
+      (let* ((rmr (cltpt/roam:roamer-from-files *organ-files*)))
+        (multiple-value-bind (forest node-to-outline)
+            (build-roam-outline-forest rmr)
+          (let ((outline-to-node (make-hash-table :test 'eq)))
+            (maphash
+             (lambda (roam-node outline-node)
+               (setf (gethash outline-node outline-to-node) roam-node))
+             node-to-outline)
+            (organ/outline-mode:open-outline
+             forest
+             :action-function
+             (lambda (outline-node)
+               (let* ((roam-node (gethash outline-node outline-to-node))
+                      (dest-file (when roam-node (cltpt/roam:node-file roam-node)))
+                      (text-obj (when roam-node (cltpt/roam:node-text-obj roam-node))))
+                 (when dest-file
+                   (let ((buffer (lem:find-file-buffer dest-file)))
+                     (lem:switch-to-buffer buffer)
+                     (when text-obj
+                       (lem:move-to-position
+                        (lem:current-point)
+                        (1+ (cltpt/base:text-object-begin-in-root text-obj))))))))))))
       (lem:message "you must customize *organ-files* first.")))
 
 (lem:define-command agenda-open () ()

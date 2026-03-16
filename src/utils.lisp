@@ -7,9 +7,32 @@
    :replace-submatch-text :replace-submatch-text*
    :find-parent-of-type :find-node-at-pos :find-node-at-point
    :insert-header-log-entry
-   :append-header-action :find-header-action :remove-header-action))
+   :append-header-action :find-header-action :remove-header-action
+   :*open-file-command* :open-file-externally))
 
 (in-package :organ/utils)
+
+(defvar *open-file-command*
+  nil
+  "command used to open files externally. when nil, auto-detects based on platform. see `default-open-command'.
+can be set to a string (e.g., \"firefox\") or a list (e.g., '(\"firefox\" \"--new-window\")).")
+
+(defun default-open-command ()
+  "return the platform-appropriate command for opening files externally."
+  #+darwin "open"
+  #+linux "xdg-open"
+  #+windows "cmd"
+  #-(or darwin linux windows) "xdg-open")
+
+(defun open-file-externally (path)
+  "open PATH with the system file opener or *open-file-command*."
+  (let* ((cmd (or *open-file-command* (default-open-command)))
+         (args (cond
+                 ((listp cmd) (append cmd (list path)))
+                 #+windows
+                 ((string-equal cmd "cmd") (list "cmd" "/c" "start" "" path))
+                 (t (list cmd path)))))
+    (uiop:run-program args)))
 
 (defun char-offset-to-point (buf offset)
   (let ((start (lem:copy-point (lem:buffer-start-point buf) :temporary)))
