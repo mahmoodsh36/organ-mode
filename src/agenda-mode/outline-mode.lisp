@@ -217,9 +217,7 @@ MODE-SETUP is an optional function called when the mode is activated."
 (lem:define-command outline-expand-collapse () ()
   "expand or collapse the node at the current point."
   (let ((point (lem:current-point)))
-    (finish-output)
-    (outline-expand-collapse-at-point point)
-    (finish-output)))
+    (outline-expand-collapse-at-point point)))
 
 (lem:define-command outline-action-at-point () ()
   "perform an action on the node at the current point."
