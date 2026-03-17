@@ -397,30 +397,29 @@ when PREDICATE returns non-NIL, return that line number."
         (when parent
           (find-node-line buffer parent (1- current-line) :previous)))))
 
-;; this is just to DRY things
-(defmacro define-sibling-command (name docstring find-fn direction)
-  "define an outline sibling navigation command."
-  `(lem:define-command ,name () ()
-     ,docstring
-     (let* ((point (lem:current-point))
-            (target-line (,find-fn point ,direction)))
-       (move-point-to-line point target-line))))
+(lem:define-command outline-next-sibling () ()
+  "move to next node at same depth."
+  (let* ((point (lem:current-point))
+         (target-line (find-sibling-node point :next)))
+    (move-point-to-line point target-line)))
 
-(define-sibling-command outline-next-sibling
-    "move to next node at same depth."
-  find-sibling-node :next)
+(lem:define-command outline-previous-sibling () ()
+  "move to previous node at same depth."
+  (let* ((point (lem:current-point))
+         (target-line (find-sibling-node point :previous)))
+    (move-point-to-line point target-line)))
 
-(define-sibling-command outline-previous-sibling
-    "move to previous node at same depth."
-  find-sibling-node :previous)
+(lem:define-command outline-next-true-sibling () ()
+  "move to next true sibling (same parent)."
+  (let* ((point (lem:current-point))
+         (target-line (find-true-sibling-node point :next)))
+    (move-point-to-line point target-line)))
 
-(define-sibling-command outline-next-true-sibling
-    "move to next true sibling (same parent)."
-  find-true-sibling-node :next)
-
-(define-sibling-command outline-previous-true-sibling
-    "move to previous true sibling (same parent)."
-  find-true-sibling-node :previous)
+(lem:define-command outline-previous-true-sibling () ()
+  "move to previous true sibling (same parent)."
+  (let* ((point (lem:current-point))
+         (target-line (find-true-sibling-node point :previous)))
+    (move-point-to-line point target-line)))
 
 (lem:define-command outline-go-to-parent () ()
   "go to parent of current node."
