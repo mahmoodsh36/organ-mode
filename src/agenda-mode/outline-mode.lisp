@@ -229,8 +229,8 @@ MODE-SETUP is an optional function called when the mode is activated."
             (funcall action-fn node)))))))
 
 (lem:define-command outline-quit () ()
-  "kill the outline buffer."
-  (lem:kill-buffer (lem:current-buffer)))
+  "quit the outline buffer, closing the window if it was opened as a popup."
+  (lem:quit-window (lem:current-window) :kill-buffer t))
 
 (defun outline-expand-collapse-at-point (point)
   "expand or collapse the node at the given point."
@@ -244,18 +244,21 @@ MODE-SETUP is an optional function called when the mode is activated."
         ;; restore cursor position based on the line number
         (lem:move-to-line (lem:buffer-point buffer) line-num)))))
 
-(defun open-outline (forest &key action-function)
+(defun open-outline (forest &key action-function pop-to (buffer-name "*outline*"))
   "open an outline buffer with the given forest structure.
 
 ACTION-FUNCTION is an optional function that takes a node as argument
-and is called when Return is pressed on a node."
-  (let ((buffer (lem:make-buffer "*outline*")))
+and is called when Return is pressed on a node.
+if POP-TO is true, the outline opens in a split window instead of replacing the current buffer."
+  (let ((buffer (lem:make-buffer buffer-name)))
     (lem:change-buffer-mode buffer 'outline-mode)
     (set-outline-forest buffer forest)
     (when action-function
       (setf (lem:buffer-value buffer +outline-action-function+) action-function))
     (render-outline buffer forest)
-    (lem:switch-to-buffer buffer)
+    (if pop-to
+        (lem:switch-to-window (lem:pop-to-buffer buffer :split-action :sensibly))
+        (lem:switch-to-buffer buffer))
     buffer))
 
 (defun find-node-in-tree (target-node tree)
