@@ -189,12 +189,12 @@ can be set to a string (e.g., \"firefox\") or a list (e.g., '(\"firefox\" \"--ne
              (end-pos (cltpt/combinator:match-end-absolute action-match))
              (header-offset (cltpt/base:text-object-begin-in-root header))
              (rel-begin (- begin-pos header-offset)))
-        ;; also remove the leading space if there is one
+        ;; also remove the leading space or newline separator
         (let ((adjusted-begin
                 (if (and (> rel-begin 0)
-                         (char= (char (cltpt/base:text-object-text header)
-                                      (1- rel-begin))
-                                #\space))
+                         (let ((c (char (cltpt/base:text-object-text header)
+                                        (1- rel-begin))))
+                           (or (char= c #\space) (char= c #\newline))))
                     (1- begin-pos)
                     begin-pos)))
           (replace-text-between-positions
