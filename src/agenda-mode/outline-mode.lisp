@@ -256,6 +256,7 @@ if POP-TO is true, the outline opens in a split window instead of replacing the 
     (when action-function
       (setf (lem:buffer-value buffer +outline-action-function+) action-function))
     (render-outline buffer forest)
+    (lem:buffer-start (lem:buffer-point buffer))
     (if pop-to
         (lem:switch-to-window (lem:pop-to-buffer buffer :split-action :sensibly))
         (lem:switch-to-buffer buffer))

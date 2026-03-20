@@ -90,10 +90,11 @@
                    :first-repeat-only first-repeat-only)))
       (organ/outline-mode:set-outline-forest buffer forest)
       (organ/outline-mode:render-outline buffer forest)
-      (lem:switch-to-buffer buffer)
-      (let ((line (find-line-for-current-time forest)))
-        (when line
-          (let ((point (lem:buffer-point buffer)))
+      (let ((point (lem:buffer-point buffer)))
+        (lem:buffer-start point)
+        (lem:switch-to-buffer buffer)
+        (let ((line (find-line-for-current-time forest)))
+          (when line
             (lem:move-to-line point line)
             ;; advance into the content area where :outline-node is set
             (lem:next-single-property-change point :outline-node)))))
