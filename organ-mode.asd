@@ -24,6 +24,7 @@
                              (:file "nav")
                              (:file "move")
                              (:file "dwim")
+                             (:file "vi")
                              ))
                (:module "agenda"
                 :pathname "src/agenda-mode/"

@@ -66,28 +66,31 @@ for :backward, finds the object starting closest before POS."
 (lem:define-command organ-prev-block () ()
   (organ-move-to-element :backward (lambda (obj) (typep obj 'cltpt/org-mode:org-block))))
 
+(defun find-submatch-at-pos (text-obj match-id)
+  "find a submatch with MATCH-ID at the cursor position within TEXT-OBJ."
+  (let ((match (cltpt/base:text-object-match text-obj))
+        (pos (organ/utils:current-pos)))
+    (or (cltpt/tree:tree-find-if
+         match
+         (lambda (submatch)
+           (and (>= (1+ pos) (cltpt/combinator:match-begin-absolute submatch))
+                (<= pos (cltpt/combinator:match-end-absolute submatch))
+                (string= (cltpt/combinator:match-id submatch) match-id))))
+        (let ((best))
+          (cltpt/tree:tree-walk
+           match
+           (lambda (submatch)
+             (when (and (>= (1+ pos) (cltpt/combinator:match-begin-absolute submatch))
+                        (string= (cltpt/combinator:match-id submatch) match-id))
+               (setf best submatch))))
+          best))))
+
 (defmethod org-table-navigate ((text-obj cltpt/org-mode:org-table) x-shift y-shift)
   (let* ((match (cltpt/base:text-object-match text-obj))
          (table-str (cltpt/base:text-object-match-text text-obj match))
          (initial-pos (organ/utils:current-pos))
          (table-start-pos (cltpt/combinator:match-begin-absolute match))
-         (cell (cltpt/tree:tree-find-if
-                match
-                (lambda (submatch)
-                  (and (>= (1+ initial-pos) (cltpt/combinator:match-begin-absolute submatch))
-                       (<= initial-pos (cltpt/combinator:match-end-absolute submatch))
-                       (string= (cltpt/combinator:match-id submatch) 'table-cell)))))
-         (effective-cell (or cell
-                             (let ((best))
-                               (cltpt/tree:tree-walk
-                                match
-                                (lambda (submatch)
-                                  (when (and (>= (1+ initial-pos)
-                                                 (cltpt/combinator:match-begin-absolute submatch))
-                                             (string= (cltpt/combinator:match-id submatch)
-                                                      'table-cell))
-                                    (setf best submatch))))
-                               best))))
+         (effective-cell (find-submatch-at-pos text-obj 'table-cell)))
     (if (not effective-cell)
         ;; if no cell found anywhere, just reformat and don't move the cursor.
         (let ((new-table-str (cltpt/org-mode:reformat-table table-str match)))
