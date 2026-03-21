@@ -52,7 +52,7 @@
   (let ((table  (find-node-at-current-pos 'cltpt/org-mode:org-table))
         (list   (find-node-at-current-pos 'cltpt/org-mode:org-list))
         (header (find-header-at-title-line))
-        (blk  (find-block-at-delimiter-line)))
+        (blk    (find-block-at-delimiter-line)))
     (cond
       (table  (values :table table))
       (list   (values :list list))
@@ -142,7 +142,7 @@
         (list-found (find-node-at-current-pos 'cltpt/org-mode:org-list)))
     (cond
       (table-found (org-table-navigate table-found 0 1))
-      (list-found (org-list-newline list-found)))))
+      (list-found (org-list-newline)))))
 
 (defmethod prefix-suffix ((p (eql *return-prefix*)))
   'organ-dwim-return)
