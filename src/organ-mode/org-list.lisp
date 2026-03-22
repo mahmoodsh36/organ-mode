@@ -42,24 +42,19 @@ e.g. (2) for top-level item at index 2, (0 1) for the second child of the first 
   "return the index of the item within its containing list."
   (car (last path)))
 
-(defun last-two-bullets (items)
-  "return (values last-bullet second-to-last-bullet) from ITEMS, or nils."
-  (let ((tail (last items 2)))
-    (values (when tail (getf (car (last tail)) :bullet))
-            (when (cdr tail) (getf (car tail) :bullet)))))
+(defun collect-bullets (items)
+  "return a list of bullet strings from ITEMS."
+  (mapcar (lambda (item) (getf item :bullet)) items))
 
-(defun renumber-items (items prev-bullet prev-prev-bullet)
-  "renumber ITEMS sequentially starting after PREV-BULLET.
-PREV-PREV-BULLET is used to disambiguate roman vs alphabetic markers."
-  (let ((prev-b prev-bullet)
-        (prev-prev-b prev-prev-bullet))
-    (dolist (item items)
-      (let ((new-b (if prev-b
-                       (next-bullet prev-b prev-prev-b)
-                       (first-bullet (getf item :bullet)))))
-        (setf prev-prev-b prev-b)
-        (setf prev-b new-b)
-        (setf (getf item :bullet) new-b)))))
+(defun renumber-items (items preceding-bullets)
+  "renumber ITEMS sequentially starting after the last bullet in PRECEDING-BULLETS.
+when PRECEDING-BULLETS is empty, items are left unchanged."
+  (when preceding-bullets
+    (let ((prev-bullets (copy-list preceding-bullets)))
+      (dolist (item items)
+        (let ((new-b (next-bullet (car (last prev-bullets)) prev-bullets)))
+          (setf prev-bullets (append prev-bullets (list new-b)))
+          (setf (getf item :bullet) new-b))))))
 
 (defun indent-item-in-list (items item-idx &key with-children)
   "indent the item at ITEM-IDX in ITEMS, making it a child of its previous sibling.
@@ -81,31 +76,27 @@ where indent-change is the content-offset at the new child level, or nil on fail
         (unless with-children
           (setf (getf item :children) nil))
         ;; set bullet: continue existing sub-list sequence, or reset
-        (setf (getf item :bullet)
-              (if existing-children
-                  (multiple-value-bind (last-b prev-b) (last-two-bullets existing-children)
-                    (next-bullet last-b prev-b))
-                  (first-bullet (getf item :bullet))))
-        ;; add as last child of previous item
-        (setf (getf prev-item :children)
-              (append existing-children (list item)))
-        ;; place orphaned children as siblings after the item in the new parent
-        (when orphaned-children
-          (renumber-items orphaned-children
-                          (getf item :bullet)
-                          (when existing-children
-                            (getf (car (last existing-children)) :bullet)))
+        (let ((child-bullets (collect-bullets existing-children)))
+          (setf (getf item :bullet)
+                (if child-bullets
+                    (next-bullet (car (last child-bullets)) child-bullets)
+                    (getf (car items) :bullet)))
+          ;; add as last child of previous item
           (setf (getf prev-item :children)
-                (append (getf prev-item :children) orphaned-children)))
-        ;; remove from list
-        (setf (cdr (nthcdr (1- item-idx) items)) (nthcdr (1+ item-idx) items))
-        ;; renumber remaining items after the removed one
-        (renumber-items (nthcdr item-idx items)
-                        (getf prev-item :bullet)
-                        (when (> item-idx 1)
-                          (getf (nth (- item-idx 2) items) :bullet)))
-        (let ((first-child-bullet (getf (car (getf prev-item :children)) :bullet)))
-          (values (1+ (length first-child-bullet)) old-bullet (getf item :bullet))))))
+                (append existing-children (list item)))
+          ;; place orphaned children as siblings after the item in the new parent
+          (when orphaned-children
+            (renumber-items orphaned-children
+                            (append child-bullets (list (getf item :bullet))))
+            (setf (getf prev-item :children)
+                  (append (getf prev-item :children) orphaned-children)))
+          ;; remove from list
+          (setf (cdr (nthcdr (1- item-idx) items)) (nthcdr (1+ item-idx) items))
+          ;; renumber remaining items after the removed one
+          (renumber-items (nthcdr item-idx items)
+                          (collect-bullets (subseq items 0 item-idx)))
+          (let ((first-child-bullet (getf (car (getf prev-item :children)) :bullet)))
+            (values (1+ (length first-child-bullet)) old-bullet (getf item :bullet)))))))
 
 (defun org-list-indent (list-obj with-children)
   (let ((col (lem:point-column (lem:current-point)))
@@ -152,15 +143,21 @@ content-offset at the old child level, or nil on failure."
         ;; adopt subsequent siblings as children
         (let ((subsequent (subseq children (1+ sub-idx))))
           (when subsequent
-            (multiple-value-bind (prev-b prev-prev-b) (last-two-bullets (getf item :children))
-              (renumber-items subsequent prev-b prev-prev-b))
+            (let ((existing-child-bullets (collect-bullets (getf item :children))))
+              (if existing-child-bullets
+                  (renumber-items subsequent existing-child-bullets)
+                  ;; no existing children: first adopted item inherits the first bullet
+                  ;; of the list it came from, then renumber the rest after it
+                  (progn
+                    (setf (getf (car subsequent) :bullet) (getf (car children) :bullet))
+                    (when (cdr subsequent)
+                      (renumber-items (cdr subsequent) (list (getf (car children) :bullet)))))))
             (setf (getf item :children)
                   (append (getf item :children) subsequent))))
         ;; set bullet to continue the parent level's sequence
-        (setf (getf item :bullet)
-              (next-bullet (getf parent-item :bullet)
-                           (when (> parent-idx 0)
-                             (getf (nth (1- parent-idx) parent-list) :bullet))))
+        (let ((parent-level-bullets (collect-bullets (subseq parent-list 0 (1+ parent-idx)))))
+          (setf (getf item :bullet)
+                (next-bullet (getf parent-item :bullet) parent-level-bullets)))
         ;; remove item and all adopted siblings from parent's children
         (setf (getf parent-item :children)
               (subseq children 0 sub-idx))
@@ -169,8 +166,7 @@ content-offset at the old child level, or nil on failure."
           (setf (cdr cell) (cons item (cdr cell))))
         ;; renumber subsequent siblings in the parent list
         (renumber-items (nthcdr (+ parent-idx 2) parent-list)
-                        (getf item :bullet)
-                        (getf parent-item :bullet))
+                        (collect-bullets (subseq parent-list 0 (+ parent-idx 2))))
         (values indent-change old-bullet (getf item :bullet))))))
 
 (defun org-list-dedent (list-obj error-on-children)
@@ -260,47 +256,35 @@ swaps only the content portion, keeping bullets and indentation in place."
   "extract bullet info from LIST-MATCH for the item at POS.
 recurses into nested sub-lists when the cursor falls within one.
 POS should already be adjusted for end-of-line boundaries (see `current-pos-no-newline').
-returns (values indent bullet-str prev-bullet-str) or nil."
-  (let ((items (cltpt/combinator:match-children list-match)))
+returns (values indent bullets) where bullets is all bullet strings up to and including the current item, or nil."
+  (let ((items (cltpt/combinator:match-children list-match))
+        (bullets))
     (loop for item in items
-          for i from 0
-          when (and (<= (cltpt/combinator:match-begin-absolute item) pos)
-                    (<= pos (cltpt/combinator:match-end-absolute item)))
-            return
-            (let* ((content-node
-                     (cltpt/combinator/match:find-direct-match-child-by-id
-                      item
-                      'cltpt/org-mode::list-item-content))
-                   (sub-list
-                     (when content-node
-                       (cltpt/combinator/match:find-direct-match-child-by-id
-                        content-node
-                        'cltpt/org-mode::org-list))))
-              (if (and sub-list
-                       (<= (cltpt/combinator:match-begin-absolute sub-list) pos)
-                       (<= pos (cltpt/combinator:match-end-absolute sub-list)))
-                  (list-match-item-info sub-list buf-text pos)
-                  (let* ((bullet-node
-                           (cltpt/combinator/match:find-direct-match-child-by-id
-                            item
-                            'cltpt/org-mode::list-item-bullet))
-                         (bullet-str (when bullet-node
-                                       (cltpt/combinator:match-text bullet-node buf-text)))
-                         (indent (or (getf (cltpt/combinator:match-props item) :indent) 0))
-                         (prev-item (when (> i 0)
-                                      (nth (1- i) items)))
-                         (prev-bullet-node
-                           (when prev-item
-                             (cltpt/combinator/match:find-direct-match-child-by-id
-                              prev-item
-                              'cltpt/org-mode::list-item-bullet)))
-                         (prev-bullet-str
-                           (when prev-bullet-node
-                             (cltpt/combinator:match-text prev-bullet-node buf-text))))
-                    (values indent bullet-str prev-bullet-str)))))))
+          for bn = (cltpt/combinator/match:find-direct-match-child-by-id
+                    item
+                    'cltpt/org-mode::list-item-bullet)
+          when bn do (push (cltpt/combinator:match-text bn buf-text) bullets)
+            when (and (<= (cltpt/combinator:match-begin-absolute item) pos)
+                      (<= pos (cltpt/combinator:match-end-absolute item)))
+              return (let* ((content-node
+                              (cltpt/combinator/match:find-direct-match-child-by-id
+                               item
+                               'cltpt/org-mode::list-item-content))
+                            (sub-list
+                              (when content-node
+                                (cltpt/combinator/match:find-direct-match-child-by-id
+                                 content-node
+                                 'cltpt/org-mode:org-list))))
+                       (if (and sub-list
+                                (<= (cltpt/combinator:match-begin-absolute sub-list) pos)
+                                (<= pos (cltpt/combinator:match-end-absolute sub-list)))
+                           (list-match-item-info sub-list buf-text pos)
+                           (values (or (getf (cltpt/combinator:match-props item) :indent) 0)
+                                   (nreverse bullets)))))))
 
 (defun list-item-info (list-obj)
-  "extract bullet info from the parsed tree for the list-item at point. returns (values indent bullet-str prev-bullet-str) or nil."
+  "extract bullet info from the parsed tree for the list-item at point.
+returns (values indent bullets) where bullets is all bullet strings up to and including the current item."
   (list-match-item-info
    (cltpt/base:text-object-match list-obj)
    (lem:buffer-text (lem:current-buffer))
@@ -362,14 +346,22 @@ returns (values indent bullet-str prev-bullet-str) or nil."
        (char= (char marker 0)
               (code-char (1+ (char-code (char prev-marker 0)))))))
 
-(defun increment-marker (marker prev-marker)
-  "return the next marker string, using PREV-MARKER to disambiguate roman vs alphabetic."
-  (let ((num (ignore-errors (parse-integer marker))))
+(defun roman-sequence-p (markers)
+  "true if MARKERS contains evidence of a roman numeral sequence (any multi-char roman marker)."
+  (some (lambda (m)
+          (and m (> (length m) 1) (roman-to-int m)))
+        markers))
+
+(defun increment-marker (marker all-markers)
+  "return the next marker string, using ALL-MARKERS (list of all preceding markers) to disambiguate."
+  (let ((num (ignore-errors (parse-integer marker)))
+        (prev-marker (car (last all-markers))))
     (cond
       (num (format nil "~A" (1+ num)))
       ;; single-char that's both roman and alpha: check context
       ((and (= (length marker) 1)
             (roman-to-int marker)
+            (not (roman-sequence-p all-markers))
             (alphabetic-successor-p marker prev-marker))
        (string (code-char (1+ (char-code (char marker 0))))))
       ;; roman numeral
@@ -379,42 +371,25 @@ returns (values indent bullet-str prev-bullet-str) or nil."
       ;; alphabetic fallback
       (t (string (code-char (1+ (char-code (char marker (1- (length marker)))))))))))
 
-(defun first-bullet (bullet)
-  "return the first bullet of the same type as BULLET.
-\"-\" stays \"-\", ordered bullets reset to their first value (\"1.\", \"a.\", \"i.\", etc.).
-multi-character roman numerals (e.g. \"ii.\") are detected unambiguously.
-single-character markers that are both roman and alphabetic (e.g. \"i.\") default to alphabetic."
-  (if (string= bullet "-")
-      "-"
-      (let ((marker (bullet-marker bullet)))
-        (cond
-          ((null marker) bullet)
-          ((digit-char-p (char marker 0)) "1.")
-          ;; multi-char roman numerals are unambiguous
-          ((and (> (length marker) 1) (roman-to-int marker))
-           (if (lower-case-p (char marker 0)) "i." "I."))
-          ((lower-case-p (char marker 0)) "a.")
-          ((upper-case-p (char marker 0)) "A.")
-          (t "1.")))))
 
-(defun next-bullet (bullet &optional prev-bullet)
+(defun next-bullet (bullet &optional all-bullets)
   "given a bullet like \"-\", \"1.\", \"ii.\", \"a.\", return the next bullet.
 
-PREV-BULLET is used to disambiguate single-char roman vs alphabetic markers."
+ALL-BULLETS is the list of all bullets at this level for disambiguation."
   (if (string= bullet "-")
       "-"
       (let ((marker (bullet-marker bullet))
-            (prev-marker (bullet-marker prev-bullet)))
+            (all-markers (mapcar #'bullet-marker all-bullets)))
         (if marker
-            (format nil "~A." (increment-marker marker prev-marker))
+            (format nil "~A." (increment-marker marker all-markers))
             bullet))))
 
 (defun org-list-newline ()
   "insert a new list entry on the next line with the correct bullet and indentation."
   (let ((list-obj (current-text-obj-ignore-newline 'cltpt/org-mode:org-list)))
-    (multiple-value-bind (indent bullet prev-bullet) (list-item-info list-obj)
-      (when (and indent bullet)
-        (let ((new-bullet (next-bullet bullet prev-bullet))
+    (multiple-value-bind (indent bullets) (list-item-info list-obj)
+      (when (and indent bullets)
+        (let ((new-bullet (next-bullet (car (last bullets)) bullets))
               (indent-str (make-string indent :initial-element #\space))
               (pt (lem:current-point)))
           (lem:line-end pt)
