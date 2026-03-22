@@ -8,4 +8,6 @@
   :components ((:file "utils")
                (:file "tests")
                (:file "move")
+               (:file "org-list")
+               (:file "org-table")
                (:file "nav")))

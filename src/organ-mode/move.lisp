@@ -1,6 +1,93 @@
 (in-package :organ/organ-mode)
 
-;; NOTE: most of the functions only work for direction=+1/-1
+(defmethod object-closest-to-pos ((tree cltpt/base:text-object)
+                                  pos
+                                  direction
+                                  &optional (predicate (lambda (&rest args) t)))
+  "finds the text object closest to POS in DIRECTION (:forward or :backward).
+for :forward, finds the object starting closest after POS.
+for :backward, finds the object starting closest before POS."
+  (let ((prune-test (ecase direction
+                      (:forward #'<=)
+                      (:backward #'>=)))
+        (candidate-test (ecase direction
+                          (:forward #'>)
+                          (:backward #'<)))
+        (better-test (ecase direction
+                       (:forward #'<)
+                       (:backward #'>)))
+        (prune-accessor (ecase direction
+                          (:forward #'cltpt/base:text-object-end-in-root)
+                          (:backward #'cltpt/base:text-object-begin-in-root))))
+    ;; prune: if the entire object is on the wrong side of pos, skip this branch.
+    (when (funcall prune-test (funcall prune-accessor tree) pos)
+      (return-from object-closest-to-pos nil))
+    (let ((best-candidate))
+      (when (and (funcall candidate-test (cltpt/base:text-object-begin-in-root tree) pos)
+                 (funcall predicate tree))
+        (setf best-candidate tree))
+      (loop for child in (cltpt/base:text-object-children tree)
+            do (let ((candidate (object-closest-to-pos child pos direction predicate)))
+                 (when candidate
+                   (if (or (null best-candidate)
+                           (funcall better-test
+                                    (cltpt/base:text-object-begin-in-root candidate)
+                                    (cltpt/base:text-object-begin-in-root best-candidate)))
+                       (setf best-candidate candidate)))))
+      best-candidate)))
+
+(lem:define-command organ-next-element () ()
+  (organ-move-to-element :forward))
+
+(lem:define-command organ-prev-element () ()
+  (organ-move-to-element :backward))
+
+(lem:define-command organ-next-header () ()
+  (organ-move-to-element :forward (lambda (obj) (typep obj 'cltpt/org-mode:org-header))))
+
+(lem:define-command organ-prev-header () ()
+  (organ-move-to-element :backward (lambda (obj) (typep obj 'cltpt/org-mode:org-header))))
+
+(lem:define-command organ-next-link () ()
+  (organ-move-to-element :forward (lambda (obj) (typep obj 'cltpt/org-mode:org-link))))
+
+(lem:define-command organ-prev-link () ()
+  (organ-move-to-element :backward (lambda (obj) (typep obj 'cltpt/org-mode:org-link))))
+
+(lem:define-command organ-next-src-block () ()
+  (organ-move-to-element :forward (lambda (obj) (typep obj 'cltpt/org-mode:org-src-block))))
+
+(lem:define-command organ-prev-src-block () ()
+  (organ-move-to-element :backward (lambda (obj) (typep obj 'cltpt/org-mode:org-src-block))))
+
+(lem:define-command organ-next-block () ()
+  (organ-move-to-element :forward (lambda (obj) (typep obj 'cltpt/org-mode:org-block))))
+
+(lem:define-command organ-prev-block () ()
+  (organ-move-to-element :backward (lambda (obj) (typep obj 'cltpt/org-mode:org-block))))
+
+(defun find-submatch-at-pos (text-obj match-id)
+  "find a submatch with MATCH-ID at the cursor position within TEXT-OBJ.
+returns (values submatch exact-p) where EXACT-P is t when the cursor is directly
+inside the submatch, nil when the closest preceding submatch was used as fallback."
+  (let ((match (cltpt/base:text-object-match text-obj))
+        (pos (organ/utils:current-pos)))
+    (let ((exact (cltpt/tree:tree-find-if
+                  match
+                  (lambda (submatch)
+                    (and (>= (1+ pos) (cltpt/combinator:match-begin-absolute submatch))
+                         (<= pos (cltpt/combinator:match-end-absolute submatch))
+                         (string= (cltpt/combinator:match-id submatch) match-id))))))
+      (if exact
+          (values exact t)
+          (let ((best))
+            (cltpt/tree:tree-walk
+             match
+             (lambda (submatch)
+               (when (and (>= (1+ pos) (cltpt/combinator:match-begin-absolute submatch))
+                          (string= (cltpt/combinator:match-id submatch) match-id))
+                 (setf best submatch))))
+            (values best nil))))))
 
 (defun swap-text-objects (obj-a obj-b)
   "swap the buffer text of OBJ-A and OBJ-B."
@@ -113,404 +200,3 @@ swaps full subtrees (including body text and sub-headers)."
                       (organ/utils:char-offset-to-point
                        (lem:current-buffer)
                        new-pos)))))
-
-(defun org-table-move-row (table-obj direction)
-  "move the table row at point up or down within TABLE-OBJ.
-
-DIRECTION is -1 (up) or +1 (down)."
-  (let* ((match (cltpt/base:text-object-match table-obj))
-         (buf-text (lem:buffer-text (lem:current-buffer)))
-         (table-str (cltpt/combinator:match-text match buf-text))
-         (table-start-pos (cltpt/combinator:match-begin-absolute match))
-         (data (cltpt/org-mode:table-match-to-list table-str match))
-         ;; find which data row the cursor is on
-         (pos (organ/utils:current-pos))
-         (row-nodes (loop for child in (cltpt/combinator:match-children match)
-                          when (eq (cltpt/combinator:match-id child)
-                                   'cltpt/org-mode::table-row)
-                            collect child))
-         (row-idx (loop for row in row-nodes
-                        for i from 0
-                        when (and (<= (cltpt/combinator:match-begin-absolute row) pos)
-                                  (<= pos (cltpt/combinator:match-end-absolute row)))
-                          return i))
-         ;; map row-idx to data index (skipping :hrule entries)
-         (data-indices (loop for item in data
-                             for i from 0
-                             when (listp item)
-                               collect i))
-         (data-idx (when row-idx
-                     (nth row-idx data-indices)))
-         (target-row-idx (when row-idx
-                           (+ row-idx direction)))
-         (target-data-idx (when (and target-row-idx
-                                     (>= target-row-idx 0)
-                                     (< target-row-idx (length data-indices)))
-                            (nth target-row-idx data-indices))))
-    (when (and data-idx
-               target-data-idx
-               (>= target-row-idx 0)
-               (< target-row-idx (length data-indices)))
-      (rotatef (nth data-idx data) (nth target-data-idx data))
-      (let ((new-str (cltpt/org-mode:list-to-table-string data)))
-        (organ/utils:replace-submatch-text* (lem:current-buffer) match new-str)
-        ;; position cursor on the target row
-        (let* ((new-match (cltpt/org-mode:org-table-matcher
-                           nil
-                           (cltpt/reader:reader-from-string new-str)
-                           0))
-               (new-row-nodes (loop for child in (cltpt/combinator:match-children new-match)
-                                    when (eq (cltpt/combinator:match-id child)
-                                             'cltpt/org-mode::table-row)
-                                      collect child))
-               (moved-row (nth target-row-idx new-row-nodes))
-               (cursor-pos (when moved-row
-                             (+ (1+ table-start-pos)
-                                (cltpt/combinator:match-begin-absolute moved-row)))))
-          (when cursor-pos
-            (lem:move-point (lem:current-point)
-                            (organ/utils:char-offset-to-point (lem:current-buffer)
-                                                              cursor-pos))))))))
-
-(defun org-table-move-column (table-obj direction)
-  "move the table column at point left or right within TABLE-OBJ.
-
-DIRECTION is -1 (left) or +1 (right)."
-  (let* ((match (cltpt/base:text-object-match table-obj))
-         (buf-text (lem:buffer-text (lem:current-buffer)))
-         (table-str (cltpt/combinator:match-text match buf-text))
-         (table-start-pos (cltpt/combinator:match-begin-absolute match))
-         (fresh-match match)
-         (data (cltpt/org-mode:table-match-to-list table-str fresh-match))
-         (width (cltpt/org-mode:get-table-width fresh-match))
-         ;; find which column the cursor is in using cursor's column position
-         (cursor-col (lem:point-column (lem:current-point)))
-         (first-row (find-if
-                     (lambda (n)
-                       (eq (cltpt/combinator:match-id n) 'cltpt/org-mode::table-row))
-                     (cltpt/combinator:match-children fresh-match)))
-         (row-cells (when first-row
-                      (remove-if-not
-                       (lambda (n)
-                         (eq (cltpt/combinator:match-id n) 'cltpt/org-mode::table-cell))
-                       (cltpt/combinator:match-children first-row))))
-         (row-begin (when first-row
-                      (cltpt/combinator:match-begin first-row)))
-         (col-idx (when row-cells
-                    (or (loop for c in row-cells
-                              for i from 0
-                              when (and (>= cursor-col
-                                            (+ row-begin (cltpt/combinator:match-begin c)))
-                                        (< cursor-col
-                                           (+ row-begin (cltpt/combinator:match-end c))))
-                                return i)
-                        ;; on delimiter: find nearest cell to the right
-                        (loop for c in row-cells
-                              for i from 0
-                              when (>= (+ row-begin (cltpt/combinator:match-begin c))
-                                       cursor-col)
-                                return i)
-                        ;; past last cell: use last column
-                        (1- (length row-cells)))))
-         (target-col (when col-idx
-                       (+ col-idx direction))))
-    (when (and col-idx target-col (>= target-col 0) (< target-col width))
-      ;; swap columns in every data row
-      (dolist (row data)
-        (when (listp row)
-          (rotatef (nth col-idx row) (nth target-col row))))
-      (let ((new-str (cltpt/org-mode:list-to-table-string data)))
-        (organ/utils:replace-submatch-text* (lem:current-buffer) match new-str)
-        ;; position cursor on the target column, same row
-        (let* ((new-match (cltpt/org-mode:org-table-matcher
-                           nil
-                           (cltpt/reader:reader-from-string new-str)
-                           0))
-               ;; find current row index from cursor line within the table
-               (cur-line (lem:line-number-at-point (lem:current-point)))
-               (table-line (lem:line-number-at-point
-                            (organ/utils:char-offset-to-point
-                             (lem:current-buffer)
-                             (1+ table-start-pos))))
-               (row-offset (- cur-line table-line))
-               ;; count how many data rows precede the cursor line
-               (row-coord (let ((data-row-idx -1)
-                                (line-idx 0))
-                            (dolist (child (cltpt/combinator:match-children fresh-match))
-                              (case (cltpt/combinator:match-id child)
-                                (cltpt/org-mode::table-row
-                                 (incf data-row-idx)
-                                 (when (= line-idx row-offset)
-                                   (return data-row-idx))
-                                 (incf line-idx))
-                                (cltpt/org-mode::table-hrule
-                                 (incf line-idx))
-                                (cltpt/org-mode::table-row-separator
-                                 nil)))))
-               (target-cell (when row-coord
-                              (cltpt/org-mode:get-cell-at-coordinates
-                               new-match
-                               (cons target-col row-coord))))
-               (cursor-pos (when target-cell
-                             (+ (1+ table-start-pos)
-                                (cltpt/combinator:match-begin-absolute target-cell)))))
-          (when cursor-pos
-            (lem:move-point (lem:current-point)
-                            (organ/utils:char-offset-to-point (lem:current-buffer)
-                                                              cursor-pos))))))))
-
-(defun find-path-in-list-match (list-match pos)
-  "find the path of list-item indices from LIST-MATCH (an org-list match) to the innermost
-list-item containing POS. returns a list of indices, e.g. (0 1) for org-list[0][1]."
-  (loop for item in (cltpt/combinator:match-children list-match)
-        for i from 0
-        when (and (>= (1+ pos) (cltpt/combinator:match-begin-absolute item))
-                  (<= pos (cltpt/combinator:match-end-absolute item)))
-          return (let* ((content (cltpt/combinator/match:find-direct-match-child-by-id
-                                  item
-                                  'cltpt/org-mode::list-item-content))
-                        (sub-list (when content
-                                    (cltpt/combinator/match:find-direct-match-child-by-id
-                                     content
-                                     'cltpt/org-mode:org-list)))
-                        (sub-path (when sub-list
-                                    (find-path-in-list-match sub-list pos))))
-                   (if sub-path
-                       (cons i sub-path)
-                       (list i)))))
-
-(defun current-item-data (list-obj)
-  "find the current list item's position in the nested data structure.
-returns (values path data) where path is a list of indices from root to the item,
-e.g. (2) for top-level item at index 2, (0 1) for the second child of the first item."
-  (let* ((match (cltpt/base:text-object-match list-obj))
-         (buf-text (lem:buffer-text (lem:current-buffer)))
-         (pos (organ/utils:current-pos-no-newline))
-         (path (find-path-in-list-match match pos)))
-    (when path
-      (values path
-              (cltpt/org-mode:list-match-to-list buf-text match)))))
-
-(defun containing-list (data path)
-  "return the list containing the item at PATH in the nested list DATA."
-  (if (= (length path) 1)
-      data
-      (containing-list (getf (nth (first path) data) :children) (rest path))))
-
-(defun item-index-in-list (path)
-  "return the index of the item within its containing list."
-  (car (last path)))
-
-(defun last-two-bullets (items)
-  "return (values last-bullet second-to-last-bullet) from ITEMS, or nils."
-  (let ((tail (last items 2)))
-    (values (when tail (getf (car (last tail)) :bullet))
-            (when (cdr tail) (getf (car tail) :bullet)))))
-
-(defun renumber-items (items prev-bullet prev-prev-bullet)
-  "renumber ITEMS sequentially starting after PREV-BULLET.
-PREV-PREV-BULLET is used to disambiguate roman vs alphabetic markers."
-  (let ((prev-b prev-bullet)
-        (prev-prev-b prev-prev-bullet))
-    (dolist (item items)
-      (let ((new-b (if prev-b
-                       (next-bullet prev-b prev-prev-b)
-                       (first-bullet (getf item :bullet)))))
-        (setf prev-prev-b prev-b)
-        (setf prev-b new-b)
-        (setf (getf item :bullet) new-b)))))
-
-(defun indent-item-in-list (items item-idx &key with-children)
-  "indent the item at ITEM-IDX in ITEMS, making it a child of its previous sibling.
-when WITH-CHILDREN is nil, the item's children are detached and placed as siblings of the item
-at the new level. when WITH-CHILDREN is t, children move along.
-modifies ITEMS destructively. returns (values indent-change old-bullet new-bullet)
-where indent-change is the content-offset at the new child level, or nil on failure."
-  (if (= item-idx 0)
-      (lem:editor-error "cannot indent first item of a list")
-      (let* ((item (nth item-idx items))
-             (old-bullet (getf item :bullet))
-             ;; prev-item is where the item we're indenting gets attached as a new sibling.
-             (prev-item (nth (1- item-idx) items))
-             (existing-children (getf prev-item :children))
-             (orphaned-children (unless with-children
-                                  (getf item :children))))
-        ;; detach children if not moving them along. orphaned children are re-attached as siblings
-        ;; at the new level later below.
-        (unless with-children
-          (setf (getf item :children) nil))
-        ;; set bullet: continue existing sub-list sequence, or reset
-        (setf (getf item :bullet)
-              (if existing-children
-                  (multiple-value-bind (last-b prev-b) (last-two-bullets existing-children)
-                    (next-bullet last-b prev-b))
-                  (first-bullet (getf item :bullet))))
-        ;; add as last child of previous item
-        (setf (getf prev-item :children)
-              (append existing-children (list item)))
-        ;; place orphaned children as siblings after the item in the new parent
-        (when orphaned-children
-          (renumber-items orphaned-children
-                          (getf item :bullet)
-                          (when existing-children
-                            (getf (car (last existing-children)) :bullet)))
-          (setf (getf prev-item :children)
-                (append (getf prev-item :children) orphaned-children)))
-        ;; remove from list
-        (setf (cdr (nthcdr (1- item-idx) items)) (nthcdr (1+ item-idx) items))
-        ;; renumber remaining items after the removed one
-        (renumber-items (nthcdr item-idx items)
-                        (getf prev-item :bullet)
-                        (when (> item-idx 1)
-                          (getf (nth (- item-idx 2) items) :bullet)))
-        (let ((first-child-bullet (getf (car (getf prev-item :children)) :bullet)))
-          (values (1+ (length first-child-bullet)) old-bullet (getf item :bullet))))))
-
-(defun org-list-indent (list-obj with-children)
-  (let ((col (lem:point-column (lem:current-point)))
-        (line (lem:line-number-at-point (lem:current-point))))
-    (multiple-value-bind (path data) (current-item-data list-obj)
-      (when path
-        (let* ((match (cltpt/base:text-object-match list-obj))
-               (indent (or (getf (cltpt/combinator:match-props match) :indent) 0))
-               (items (containing-list data path))
-               (idx (item-index-in-list path)))
-          (multiple-value-bind (indent-change old-bullet new-bullet)
-              (indent-item-in-list items idx :with-children with-children)
-            (when indent-change
-              (let ((bullet-delta (- (length new-bullet) (length old-bullet)))
-                    (new-str (cltpt/org-mode:list-to-list-string data indent)))
-                (organ/utils:replace-submatch-text* (lem:current-buffer) match new-str)
-                (lem:move-to-line (lem:current-point) line)
-                (lem:move-to-column (lem:current-point)
-                                    (+ col indent-change bullet-delta))))))))))
-
-(defun org-list-indent-item (list-obj)
-  "indent the list item at point, making it a child of the previous sibling.
-children are detached and become siblings at the new level."
-  (org-list-indent list-obj nil))
-
-(defun org-list-indent-tree (list-obj)
-  "indent the list item at point along with its children, making the whole subtree a child
-of the previous sibling."
-  (org-list-indent list-obj t))
-
-(defun dedent-item-in-list (children sub-idx parent-item parent-list parent-idx
-                            &key error-on-children)
-  "dedent the item at SUB-IDX in CHILDREN out to PARENT-LIST after PARENT-IDX.
-subsequent siblings always become children of the dedented item.
-when ERROR-ON-CHILDREN is true and the item already has children, signals an error.
-returns (values indent-change old-bullet new-bullet) where indent-change is the
-content-offset at the old child level, or nil on failure."
-  (let ((item (nth sub-idx children)))
-    (when item
-      (when (and error-on-children (getf item :children))
-        (lem:editor-error "cannot dedent an item without its children"))
-      (let ((old-bullet (getf item :bullet))
-            (indent-change (1+ (length (getf (car children) :bullet)))))
-        ;; adopt subsequent siblings as children
-        (let ((subsequent (subseq children (1+ sub-idx))))
-          (when subsequent
-            (multiple-value-bind (prev-b prev-prev-b) (last-two-bullets (getf item :children))
-              (renumber-items subsequent prev-b prev-prev-b))
-            (setf (getf item :children)
-                  (append (getf item :children) subsequent))))
-        ;; set bullet to continue the parent level's sequence
-        (setf (getf item :bullet)
-              (next-bullet (getf parent-item :bullet)
-                           (when (> parent-idx 0)
-                             (getf (nth (1- parent-idx) parent-list) :bullet))))
-        ;; remove item and all adopted siblings from parent's children
-        (setf (getf parent-item :children)
-              (subseq children 0 sub-idx))
-        ;; insert after parent in its containing list
-        (let ((cell (nthcdr parent-idx parent-list)))
-          (setf (cdr cell) (cons item (cdr cell))))
-        ;; renumber subsequent siblings in the parent list
-        (renumber-items (nthcdr (+ parent-idx 2) parent-list)
-                        (getf item :bullet)
-                        (getf parent-item :bullet))
-        (values indent-change old-bullet (getf item :bullet))))))
-
-(defun org-list-dedent (list-obj error-on-children)
-  "dedent an item or a tree in a list.
-always adopts subsequent siblings. when ERROR-ON-CHILDREN, errors if item has children."
-  (let ((col (lem:point-column (lem:current-point)))
-        (line (lem:line-number-at-point (lem:current-point))))
-    (multiple-value-bind (path data) (current-item-data list-obj)
-      (when (and path (> (length path) 1))
-        (let* ((match (cltpt/base:text-object-match list-obj))
-               (indent (or (getf (cltpt/combinator:match-props match) :indent) 0))
-               (sub-idx (item-index-in-list path))
-               (parent-path (butlast path))
-               (parent-list (containing-list data parent-path))
-               (parent-idx (item-index-in-list parent-path))
-               (parent-item (nth parent-idx parent-list))
-               (children (getf parent-item :children)))
-          (multiple-value-bind (indent-change old-bullet new-bullet)
-              (dedent-item-in-list children
-                                   sub-idx
-                                   parent-item
-                                   parent-list
-                                   parent-idx
-                                   :error-on-children error-on-children)
-            (when indent-change
-              (let* ((bullet-delta (- (length new-bullet) (length old-bullet)))
-                     (new-str (cltpt/org-mode:list-to-list-string data indent)))
-                (organ/utils:replace-submatch-text* (lem:current-buffer) match new-str)
-                (lem:move-to-line (lem:current-point) line)
-                (lem:move-to-column (lem:current-point)
-                                    (max 0 (+ col (- bullet-delta indent-change))))))))))))
-
-(defun org-list-dedent-item (list-obj)
-  "dedent a nested list item, moving it out to the parent level after its parent item.
-subsequent siblings become children of the dedented item.
-errors if the item already has children (use dedent-tree instead)."
-  (org-list-dedent list-obj t))
-
-(defun org-list-dedent-tree (list-obj)
-  "dedent a nested list item along with its existing children, moving the whole subtree
-to the parent level after the parent item. subsequent siblings also become children."
-  (org-list-dedent list-obj nil))
-
-(defun org-list-move-item (list-obj direction)
-  "move the list item at point up or down within LIST-OBJ.
-
-DIRECTION is -1 (up) or +1 (down).
-swaps only the content portion, keeping bullets and indentation in place."
-  (let* ((match (cltpt/base:text-object-match list-obj))
-         (buf-text (lem:buffer-text (lem:current-buffer)))
-         (data (cltpt/org-mode:list-match-to-list buf-text match))
-         (indent (or (getf (cltpt/combinator:match-props match) :indent) 0))
-         (items (cltpt/combinator:match-children match))
-         (pos (organ/utils:current-pos))
-         (idx (loop for item in items
-                    for i from 0
-                    when (and (<= (cltpt/combinator:match-begin-absolute item) pos)
-                              (<= pos (cltpt/combinator:match-end-absolute item)))
-                      return i))
-         (target (when idx (+ idx direction))))
-    (when (and data idx target (>= target 0) (< target (length data)))
-      ;; swap content and children, keeping bullets in place
-      (let ((item-a (nth idx data))
-            (item-b (nth target data)))
-        (rotatef (getf item-a :content) (getf item-b :content))
-        (rotatef (getf item-a :children) (getf item-b :children)))
-      ;; convert back to string and replace buffer text
-      (let ((new-str (cltpt/org-mode:list-to-list-string data indent)))
-        (organ/utils:replace-submatch-text* (lem:current-buffer) match new-str)
-        ;; position cursor on the target item
-        (let* ((new-match (cltpt/org-mode:org-list-matcher
-                           nil
-                           (cltpt/reader:reader-from-string new-str)
-                           0))
-               (new-items (cltpt/combinator:match-children new-match))
-               (moved-item (nth target new-items))
-               (list-start (1+ (cltpt/combinator:match-begin-absolute match)))
-               (cursor-pos (when moved-item
-                             (+ list-start
-                                (cltpt/combinator:match-begin-absolute moved-item)))))
-          (when cursor-pos
-            (lem:move-point (lem:current-point)
-                            (organ/utils:char-offset-to-point (lem:current-buffer)
-                                                              cursor-pos))))))))

@@ -9,6 +9,7 @@
    :make-test-buf-name
    :collect-children-of-type
    :with-fake-interface
+   :check-buffer
    :register-test-suite
    :run-all-suites))
 
@@ -53,3 +54,11 @@
 (let ((buf-counter 0))
   (defun make-test-buf-name ()
     (format nil "test-~A.org" (incf buf-counter))))
+
+(defun check-buffer (label buffer expected)
+  "check that BUFFER text matches EXPECTED, with concise output."
+  (let* ((result (lem:buffer-text buffer))
+         (buf-ok (string= result expected)))
+    (ok buf-ok
+        (if buf-ok (format nil "~A buffer ok" label)
+            (format nil "~A buffer mismatch:~%  got: ~S~%  exp: ~S" label result expected)))))

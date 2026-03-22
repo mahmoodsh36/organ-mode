@@ -21,7 +21,7 @@
                              (:file "utils")
                              (:file "highlighting")
                              (:file "org-list")
-                             (:file "nav")
+                             (:file "org-table")
                              (:file "move")
                              (:file "dwim")
                              (:file "vi")
