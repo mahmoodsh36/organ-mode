@@ -1,7 +1,8 @@
 (defpackage :organ/utils
   (:use :cl)
   (:export
-   :char-offset-to-point :point-to-char-offset :current-pos :replace-text-between-positions
+   :char-offset-to-point :point-to-char-offset :current-pos :current-pos-no-newline
+   :replace-text-between-positions
    :*weekday-names*
    :format-timestamp :format-inactive-timestamp-with-time
    :replace-submatch-text :replace-submatch-text*
@@ -44,6 +45,14 @@ can be set to a string (e.g., \"firefox\") or a list (e.g., '(\"firefox\" \"--ne
 
 (defun current-pos ()
   (point-to-char-offset (lem:current-point)))
+
+(defun current-pos-no-newline ()
+  "return the current cursor position, backing up one character if on a newline."
+  (let ((raw-pos (current-pos)))
+    (if (and (> raw-pos 0)
+             (lem:end-line-p (lem:current-point)))
+        (1- raw-pos)
+        raw-pos)))
 
 (defun delete-text-between-positions (buffer start-pos end-pos)
   "delete text between two absolute positions (indices) in the buffer."

@@ -36,12 +36,24 @@
   :behavior :drop
   :description "context-sensitive shift-tab")
 
+(define-prefix *shift-swap-left-prefix*
+  :key "M-H"
+  :behavior :drop
+  :description "shift-swap left (subtree)")
+
+(define-prefix *shift-swap-right-prefix*
+  :key "M-L"
+  :behavior :drop
+  :description "shift-swap right (subtree)")
+
 (define-transient *organ-dwim-keymap*
   :description "dwim keymap"
   *swap-up-prefix*
   *swap-down-prefix*
   *swap-right-prefix*
   *swap-left-prefix*
+  *shift-swap-left-prefix*
+  *shift-swap-right-prefix*
   *return-prefix*
   *tab-prefix*
   *shift-tab-prefix*)
@@ -49,8 +61,8 @@
 (lem:keymap-add-child *organ-mode-keymap* *organ-dwim-keymap*)
 
 (defun vertical-move-context ()
-  (let ((table  (find-node-at-current-pos 'cltpt/org-mode:org-table))
-        (list   (find-node-at-current-pos 'cltpt/org-mode:org-list))
+  (let ((table  (current-text-obj-ignore-newline 'cltpt/org-mode:org-table))
+        (list   (current-text-obj-ignore-newline 'cltpt/org-mode:org-list))
         (header (find-header-at-title-line))
         (blk    (find-block-at-delimiter-line)))
     (cond
@@ -87,39 +99,80 @@
 (defmethod prefix-suffix ((p (eql *swap-down-prefix*)))
   'organ-dwim-move-down)
 
+(defun horizontal-move-context ()
+  "return (values type element) for the element at cursor suitable for horizontal moves."
+  (let ((table (current-text-obj-ignore-newline 'cltpt/org-mode:org-table))
+        (list (current-text-obj-ignore-newline 'cltpt/org-mode:org-list)))
+    (cond
+      (table (values :table table))
+      (list (values :list list)))))
+
+(defun list-obj-for-dedent (list-found)
+  "return the appropriate list object for dedent. walks up to parent org-list if nested."
+  (let ((parent-list (organ/utils:find-parent-of-type
+                      (cltpt/base:text-object-parent list-found)
+                      'cltpt/org-mode:org-list)))
+    (or parent-list list-found)))
+
 (defmethod prefix-active-p ((p (eql *swap-left-prefix*)))
-  (find-node-at-current-pos 'cltpt/org-mode:org-table))
+  (horizontal-move-context))
 
 (lem:define-command organ-dwim-move-left () ()
-  (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table)))
-    (when table-found
-      (org-table-move-column table-found -1))))
+  (multiple-value-bind (type element) (horizontal-move-context)
+    (when type
+      (ecase type
+        (:table (org-table-move-column element -1))
+        (:list (org-list-dedent-item (list-obj-for-dedent element)))))))
 
 (defmethod prefix-suffix ((p (eql *swap-left-prefix*)))
   'organ-dwim-move-left)
 
 (defmethod prefix-active-p ((p (eql *swap-right-prefix*)))
-  (find-node-at-current-pos 'cltpt/org-mode:org-table))
+  (horizontal-move-context))
 
 (lem:define-command organ-dwim-move-right () ()
-  (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table)))
-    (when table-found
-      (org-table-move-column table-found 1))))
+  (multiple-value-bind (type element) (horizontal-move-context)
+    (when type
+      (ecase type
+        (:table (org-table-move-column element 1))
+        (:list (org-list-indent-item element))))))
 
 (defmethod prefix-suffix ((p (eql *swap-right-prefix*)))
   'organ-dwim-move-right)
 
+(defmethod prefix-active-p ((p (eql *shift-swap-left-prefix*)))
+  (current-text-obj-ignore-newline 'cltpt/org-mode:org-list))
+
+(lem:define-command organ-dwim-shift-move-left () ()
+  (let ((list-found (current-text-obj-ignore-newline 'cltpt/org-mode:org-list)))
+    (when list-found
+      (org-list-dedent-tree (list-obj-for-dedent list-found)))))
+
+(defmethod prefix-suffix ((p (eql *shift-swap-left-prefix*)))
+  'organ-dwim-shift-move-left)
+
+(defmethod prefix-active-p ((p (eql *shift-swap-right-prefix*)))
+  (current-text-obj-ignore-newline 'cltpt/org-mode:org-list))
+
+(lem:define-command organ-dwim-shift-move-right () ()
+  (let ((list-found (current-text-obj-ignore-newline 'cltpt/org-mode:org-list)))
+    (when list-found
+      (org-list-indent-tree list-found))))
+
+(defmethod prefix-suffix ((p (eql *shift-swap-right-prefix*)))
+  'organ-dwim-shift-move-right)
+
 (defmethod prefix-active-p ((p (eql *return-prefix*)))
-  (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table))
-        (list-found (find-node-at-current-pos 'cltpt/org-mode:org-list)))
+  (let ((table-found (current-text-obj-ignore-newline 'cltpt/org-mode:org-table))
+        (list-found (current-text-obj-ignore-newline 'cltpt/org-mode:org-list)))
     (or table-found
         (and list-found (lem:end-line-p (lem:current-point))))))
 
 (defmethod prefix-active-p ((p (eql *tab-prefix*)))
-  (find-node-at-current-pos 'cltpt/org-mode:org-table))
+  (current-text-obj-ignore-newline 'cltpt/org-mode:org-table))
 
 (lem:define-command organ-dwim-tab () ()
-  (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table)))
+  (let ((table-found (current-text-obj-ignore-newline 'cltpt/org-mode:org-table)))
     (when table-found
       (org-table-navigate table-found 1 0))))
 
@@ -127,10 +180,10 @@
   'organ-dwim-tab)
 
 (defmethod prefix-active-p ((p (eql *shift-tab-prefix*)))
-  (find-node-at-current-pos 'cltpt/org-mode:org-table))
+  (current-text-obj-ignore-newline 'cltpt/org-mode:org-table))
 
 (lem:define-command organ-dwim-shift-tab () ()
-  (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table)))
+  (let ((table-found (current-text-obj-ignore-newline 'cltpt/org-mode:org-table)))
     (when table-found
       (org-table-navigate table-found -1 0))))
 
@@ -138,8 +191,8 @@
   'organ-dwim-shift-tab)
 
 (lem:define-command organ-dwim-return () ()
-  (let ((table-found (find-node-at-current-pos 'cltpt/org-mode:org-table))
-        (list-found (find-node-at-current-pos 'cltpt/org-mode:org-list)))
+  (let ((table-found (current-text-obj-ignore-newline 'cltpt/org-mode:org-table))
+        (list-found (current-text-obj-ignore-newline 'cltpt/org-mode:org-list)))
     (cond
       (table-found (org-table-navigate table-found 0 1))
       (list-found (org-list-newline)))))

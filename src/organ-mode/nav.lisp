@@ -67,79 +67,86 @@ for :backward, finds the object starting closest before POS."
   (organ-move-to-element :backward (lambda (obj) (typep obj 'cltpt/org-mode:org-block))))
 
 (defun find-submatch-at-pos (text-obj match-id)
-  "find a submatch with MATCH-ID at the cursor position within TEXT-OBJ."
+  "find a submatch with MATCH-ID at the cursor position within TEXT-OBJ.
+returns (values submatch exact-p) where EXACT-P is t when the cursor is directly
+inside the submatch, nil when the closest preceding submatch was used as fallback."
   (let ((match (cltpt/base:text-object-match text-obj))
         (pos (organ/utils:current-pos)))
-    (or (cltpt/tree:tree-find-if
-         match
-         (lambda (submatch)
-           (and (>= (1+ pos) (cltpt/combinator:match-begin-absolute submatch))
-                (<= pos (cltpt/combinator:match-end-absolute submatch))
-                (string= (cltpt/combinator:match-id submatch) match-id))))
-        (let ((best))
-          (cltpt/tree:tree-walk
-           match
-           (lambda (submatch)
-             (when (and (>= (1+ pos) (cltpt/combinator:match-begin-absolute submatch))
-                        (string= (cltpt/combinator:match-id submatch) match-id))
-               (setf best submatch))))
-          best))))
+    (let ((exact (cltpt/tree:tree-find-if
+                  match
+                  (lambda (submatch)
+                    (and (>= (1+ pos) (cltpt/combinator:match-begin-absolute submatch))
+                         (<= pos (cltpt/combinator:match-end-absolute submatch))
+                         (string= (cltpt/combinator:match-id submatch) match-id))))))
+      (if exact
+          (values exact t)
+          (let ((best))
+            (cltpt/tree:tree-walk
+             match
+             (lambda (submatch)
+               (when (and (>= (1+ pos) (cltpt/combinator:match-begin-absolute submatch))
+                          (string= (cltpt/combinator:match-id submatch) match-id))
+                 (setf best submatch))))
+            (values best nil))))))
+
+(defun parse-table-string (table-str)
+  "parse TABLE-STR into a match tree, returning the match object."
+  (cltpt/org-mode:org-table-matcher
+   nil
+   (cltpt/reader:reader-from-string table-str)
+   0))
+
+(defun extend-table-if-needed (table-str table-match target-y)
+  "if TARGET-Y exceeds the table height, append empty rows and return new string and match.
+otherwise return the original string and match."
+  (let ((height (cltpt/org-mode:get-table-height table-match))
+        (width (cltpt/org-mode:get-table-width table-match)))
+    (if (< target-y height)
+        (values table-str table-match)
+        (let ((extended-str
+                (cltpt/org-mode:list-to-table-string
+                 (append (cltpt/org-mode:table-match-to-list table-str table-match)
+                         (loop repeat (- target-y (1- height))
+                               collect (loop repeat width
+                                             collect ""))))))
+          (values extended-str (parse-table-string extended-str))))))
 
 (defmethod org-table-navigate ((text-obj cltpt/org-mode:org-table) x-shift y-shift)
   (let* ((match (cltpt/base:text-object-match text-obj))
          (table-str (cltpt/base:text-object-match-text text-obj match))
-         (initial-pos (organ/utils:current-pos))
          (table-start-pos (cltpt/combinator:match-begin-absolute match))
-         (effective-cell (find-submatch-at-pos text-obj 'table-cell)))
-    (if (not effective-cell)
-        ;; if no cell found anywhere, just reformat and don't move the cursor.
-        (let ((new-table-str (cltpt/org-mode:reformat-table table-str match)))
-          (organ/utils:replace-submatch-text* (lem:current-buffer) match new-table-str))
-        (let* ((current-coords (cltpt/org-mode:get-cell-coordinates effective-cell))
-               (new-table-str (cltpt/org-mode:reformat-table table-str match)))
-          (multiple-value-bind (new-table-match pos)
-              (cltpt/org-mode:org-table-matcher
-               nil
-               (cltpt/reader:reader-from-string new-table-str)
-               0)
-            (let* ((width (cltpt/org-mode:get-table-width new-table-match))
-                   (height (cltpt/org-mode:get-table-height new-table-match))
-                   (current-linear (+ (* (cdr current-coords) width) (car current-coords)))
-                   (raw-shift (+ x-shift (* y-shift width)))
-                   (shift-linear (if (and (null cell) (< raw-shift 0))
-                                     0
-                                     raw-shift))
-                   (target-linear (max 0 (+ current-linear shift-linear)))
-                   (new-x (mod target-linear width))
-                   (new-y (floor target-linear width))
-                   ;; extend table if moving past last row, otherwise reuse
-                   (final-table-str
-                     (if (>= new-y height)
-                         (cltpt/org-mode:list-to-table-string
-                          (append (cltpt/org-mode:table-match-to-list
-                                   new-table-str
-                                   new-table-match)
-                                  (loop repeat (- new-y (1- height))
-                                        collect (loop repeat width collect ""))))
-                         new-table-str))
-                   (final-match
-                     (if (string= final-table-str new-table-str)
-                         new-table-match
-                         (cltpt/org-mode:org-table-matcher
-                          nil
-                          (cltpt/reader:reader-from-string final-table-str)
-                          0)))
-                   (final-height (cltpt/org-mode:get-table-height final-match))
-                   (target-coords (cons new-x (min new-y (1- final-height))))
-                   (target-cell (cltpt/org-mode:get-cell-at-coordinates
-                                 final-match
-                                 target-coords))
-                   (cursor-pos (if target-cell
-                                   (+ table-start-pos
-                                      (cltpt/combinator:match-begin-absolute target-cell)
-                                      1)
-                                   table-start-pos)))
-              (organ/utils:replace-submatch-text* (lem:current-buffer) match final-table-str)
-              (lem:move-point (lem:current-point)
-                              (organ/utils:char-offset-to-point (lem:current-buffer)
-                                                                cursor-pos))))))))
+         (new-table-str (cltpt/org-mode:reformat-table table-str match)))
+    (multiple-value-bind (effective-cell exact-p)
+        (find-submatch-at-pos text-obj 'table-cell)
+      ;; if no cell found, just reformat and don't move the cursor.
+      (when (not effective-cell)
+        (organ/utils:replace-submatch-text* (lem:current-buffer) match new-table-str)
+        (return-from org-table-navigate))
+      (let* ((current-coords (cltpt/org-mode:get-cell-coordinates effective-cell))
+             (new-table-match (parse-table-string new-table-str))
+             (width (cltpt/org-mode:get-table-width new-table-match))
+             (current-linear (+ (* (cdr current-coords) width) (car current-coords)))
+             (total-shift (if exact-p
+                              (+ x-shift (* y-shift width))
+                              (let ((raw (+ x-shift (* y-shift width))))
+                                (if (minusp raw)
+                                    0
+                                    1))))
+             (target-linear (max 0 (+ current-linear total-shift)))
+             (new-x (mod target-linear width))
+             (new-y (floor target-linear width)))
+        (multiple-value-bind (final-table-str final-match)
+            (extend-table-if-needed new-table-str new-table-match new-y)
+          (let* ((final-height (cltpt/org-mode:get-table-height final-match))
+                 (target-cell (cltpt/org-mode:get-cell-at-coordinates
+                               final-match
+                               (cons new-x (min new-y (1- final-height)))))
+                 (cursor-pos (if target-cell
+                                 (+ table-start-pos
+                                    (cltpt/combinator:match-begin-absolute target-cell)
+                                    1)
+                                 table-start-pos)))
+            (organ/utils:replace-submatch-text* (lem:current-buffer) match final-table-str)
+            (lem:move-point (lem:current-point)
+                            (organ/utils:char-offset-to-point (lem:current-buffer)
+                                                              cursor-pos))))))))

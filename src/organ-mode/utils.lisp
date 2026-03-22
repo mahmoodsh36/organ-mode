@@ -1,7 +1,7 @@
 (in-package :organ/organ-mode)
 
 ;; this is a special case where we also care about current_pos-1
-(defun find-node-at-current-pos (type)
+(defun current-text-obj-ignore-newline (type)
   (let ((pos (organ/utils:current-pos))
         (tree (current-tree)))
     ;; find enclosing element: try text-obj parent-walk first, fall back to pos-1 for
@@ -43,15 +43,15 @@
 (defun find-header-at-title-line ()
   "return the org-header under the cursor if the cursor is on its title line, else return nil."
   (let ((pos (organ/utils:current-pos))
-        (header (find-node-at-current-pos 'cltpt/org-mode:org-header)))
+        (header (current-text-obj-ignore-newline 'cltpt/org-mode:org-header)))
     (when (and header (pos-on-first-line-of-obj-p header pos))
       header)))
 
 (defun find-block-at-delimiter-line ()
   "return the org-block or org-src-block under the cursor if on its opening or closing delimiter line."
   (let ((pos (organ/utils:current-pos))
-        (blk (or (find-node-at-current-pos 'cltpt/org-mode:org-src-block)
-                 (find-node-at-current-pos 'cltpt/org-mode:org-block))))
+        (blk (or (current-text-obj-ignore-newline 'cltpt/org-mode:org-src-block)
+                 (current-text-obj-ignore-newline 'cltpt/org-mode:org-block))))
     (when (and blk
                (or (pos-on-first-line-of-obj-p blk pos)
                    (pos-on-last-line-of-obj-p blk pos)))

@@ -1,31 +1,54 @@
 (in-package :organ/organ-mode)
 
-(defun list-item-info (list-obj)
-  "extract bullet info from the parsed tree for the list-item at point. returns (values indent bullet-str prev-bullet-str) or nil."
-  (let* ((match (cltpt/base:text-object-match list-obj))
-         (buf-text (lem:buffer-text (lem:current-buffer)))
-         (pos (organ/utils:current-pos))
-         (items (cltpt/combinator:match-children match)))
+(defun list-match-item-info (list-match buf-text pos)
+  "extract bullet info from LIST-MATCH for the item at POS.
+recurses into nested sub-lists when the cursor falls within one.
+POS should already be adjusted for end-of-line boundaries (see `current-pos-no-newline').
+returns (values indent bullet-str prev-bullet-str) or nil."
+  (let ((items (cltpt/combinator:match-children list-match)))
     (loop for item in items
           for i from 0
           when (and (<= (cltpt/combinator:match-begin-absolute item) pos)
                     (<= pos (cltpt/combinator:match-end-absolute item)))
             return
-            (let* ((bullet-node (cltpt/combinator/match:find-direct-match-child-by-id
-                                 item
-                                 'cltpt/org-mode::list-item-bullet))
-                   (bullet-str (when bullet-node
-                                 (cltpt/combinator:match-text bullet-node buf-text)))
-                   (indent (or (getf (cltpt/combinator:match-props item) :indent) 0))
-                   (prev-item (when (> i 0)
-                                (nth (1- i) items)))
-                   (prev-bullet-node (when prev-item
-                                       (cltpt/combinator/match:find-direct-match-child-by-id
-                                        prev-item
-                                        'cltpt/org-mode::list-item-bullet)))
-                   (prev-bullet-str (when prev-bullet-node
-                                      (cltpt/combinator:match-text prev-bullet-node buf-text))))
-              (values indent bullet-str prev-bullet-str)))))
+            (let* ((content-node
+                     (cltpt/combinator/match:find-direct-match-child-by-id
+                      item
+                      'cltpt/org-mode::list-item-content))
+                   (sub-list
+                     (when content-node
+                       (cltpt/combinator/match:find-direct-match-child-by-id
+                        content-node
+                        'cltpt/org-mode::org-list))))
+              (if (and sub-list
+                       (<= (cltpt/combinator:match-begin-absolute sub-list) pos)
+                       (<= pos (cltpt/combinator:match-end-absolute sub-list)))
+                  (list-match-item-info sub-list buf-text pos)
+                  (let* ((bullet-node
+                           (cltpt/combinator/match:find-direct-match-child-by-id
+                            item
+                            'cltpt/org-mode::list-item-bullet))
+                         (bullet-str (when bullet-node
+                                       (cltpt/combinator:match-text bullet-node buf-text)))
+                         (indent (or (getf (cltpt/combinator:match-props item) :indent) 0))
+                         (prev-item (when (> i 0)
+                                      (nth (1- i) items)))
+                         (prev-bullet-node
+                           (when prev-item
+                             (cltpt/combinator/match:find-direct-match-child-by-id
+                              prev-item
+                              'cltpt/org-mode::list-item-bullet)))
+                         (prev-bullet-str
+                           (when prev-bullet-node
+                             (cltpt/combinator:match-text prev-bullet-node buf-text))))
+                    (values indent bullet-str prev-bullet-str)))))))
+
+(defun list-item-info (list-obj)
+  "extract bullet info from the parsed tree for the list-item at point. returns (values indent bullet-str prev-bullet-str) or nil."
+  (list-match-item-info
+   (cltpt/base:text-object-match list-obj)
+   (lem:buffer-text (lem:current-buffer))
+   (organ/utils:current-pos-no-newline)))
 
 (defun bullet-marker (bullet)
   "extract the marker part of a bullet (everything before the trailing dot). returns nil for unordered bullets."
@@ -100,6 +123,24 @@
       ;; alphabetic fallback
       (t (string (code-char (1+ (char-code (char marker (1- (length marker)))))))))))
 
+(defun first-bullet (bullet)
+  "return the first bullet of the same type as BULLET.
+\"-\" stays \"-\", ordered bullets reset to their first value (\"1.\", \"a.\", \"i.\", etc.).
+multi-character roman numerals (e.g. \"ii.\") are detected unambiguously.
+single-character markers that are both roman and alphabetic (e.g. \"i.\") default to alphabetic."
+  (if (string= bullet "-")
+      "-"
+      (let ((marker (bullet-marker bullet)))
+        (cond
+          ((null marker) bullet)
+          ((digit-char-p (char marker 0)) "1.")
+          ;; multi-char roman numerals are unambiguous
+          ((and (> (length marker) 1) (roman-to-int marker))
+           (if (lower-case-p (char marker 0)) "i." "I."))
+          ((lower-case-p (char marker 0)) "a.")
+          ((upper-case-p (char marker 0)) "A.")
+          (t "1.")))))
+
 (defun next-bullet (bullet &optional prev-bullet)
   "given a bullet like \"-\", \"1.\", \"ii.\", \"a.\", return the next bullet.
 
@@ -114,7 +155,7 @@ PREV-BULLET is used to disambiguate single-char roman vs alphabetic markers."
 
 (defun org-list-newline ()
   "insert a new list entry on the next line with the correct bullet and indentation."
-  (let ((list-obj (find-node-at-current-pos 'cltpt/org-mode:org-list)))
+  (let ((list-obj (current-text-obj-ignore-newline 'cltpt/org-mode:org-list)))
     (multiple-value-bind (indent bullet prev-bullet) (list-item-info list-obj)
       (when (and indent bullet)
         (let ((new-bullet (next-bullet bullet prev-bullet))
