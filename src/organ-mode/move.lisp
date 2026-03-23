@@ -189,6 +189,39 @@ swaps full subtrees (including body text and sub-headers)."
         (lem:move-point (lem:current-point)
                         (organ/utils:char-offset-to-point (lem:current-buffer) new-pos))))))
 
+(defun collect-subtree-headers (header)
+  "collect HEADER and all its descendant org-header children in document order."
+  (let (result)
+    (labels ((walk (node)
+               (when (typep node 'cltpt/org-mode:org-header)
+                 (push node result))
+               (dolist (child (cltpt/base:text-object-children node))
+                 (walk child))))
+      (walk header))
+    (nreverse result)))
+
+(defun org-header-level-increase (header delta)
+  "change HEADER's level by DELTA (positive to demote, negative to promote)."
+  (let* ((level (cltpt/base:text-object-property header :level))
+         (new-level (max 1 (+ level delta))))
+    (unless (= new-level level)
+      (let ((stars (cltpt/combinator:find-submatch
+                    (cltpt/base:text-object-match header)
+                    'cltpt/org-mode::stars)))
+        (organ/utils:replace-submatch-text*
+         (lem:current-buffer)
+         stars
+         (make-string new-level :initial-element #\*))))))
+
+(defun org-header-level-increase-tree (header delta)
+  "change HEADER and all its sub-headers' levels by DELTA."
+  (let* ((level (cltpt/base:text-object-property header :level))
+         (new-level (max 1 (+ level delta))))
+    (unless (= new-level level)
+      (let ((headers (collect-subtree-headers header)))
+        (dolist (h (reverse headers))
+          (org-header-level-increase h delta))))))
+
 (defun organ-move-to-element (direction &optional (predicate (lambda (&rest args) t)))
   "move point to the nearest element in DIRECTION (:forward or :backward) that satisfies PREDICATE."
   (let* ((tr (current-tree))

@@ -467,3 +467,92 @@ and org-block objects sorted by position."
               (organ/organ-mode::org-block-move last-blk 1)
               (ok (string= (lem:buffer-text buffer) text) "last block down is no-op"))))))))
 
+(defun setup-header-level-buffer (text)
+  "create a buffer with TEXT, parse the tree, switch to it, and return (values buffer tree)."
+  (multiple-value-bind (buffer tree) (make-organ-buffer (make-test-buf-name) text)
+    (lem:switch-to-buffer buffer)
+    (values buffer tree)))
+
+(defun all-headers (tree)
+  (sort (collect-children-of-type tree 'cltpt/org-mode:org-header)
+        #'<
+        :key #'cltpt/base:text-object-begin-in-root))
+
+(defun run-header-level-change-case (label text header-idx action expected)
+  "run a single promote/demote test case.
+HEADER-IDX: index into the sorted list of all headers.
+ACTION: one of :promote, :demote, :promote-tree, :demote-tree.
+EXPECTED: the expected buffer text after the action."
+  (multiple-value-bind (buffer tree) (setup-header-level-buffer text)
+    (let* ((headers (all-headers tree))
+           (header (nth header-idx headers)))
+      (lem:move-point
+       (lem:current-point)
+       (organ/utils:char-offset-to-point
+        buffer
+        (cltpt/base:text-object-begin-in-root header)))
+      (ecase action
+        (:promote (organ/organ-mode::org-header-level-increase header -1))
+        (:demote (organ/organ-mode::org-header-level-increase header 1))
+        (:promote-tree (organ/organ-mode::org-header-level-increase-tree header -1))
+        (:demote-tree (organ/organ-mode::org-header-level-increase-tree header 1)))
+      (check-buffer label buffer expected))))
+
+(deftest header-promote-demote
+  "header promotion and demotion tests."
+  (lem:with-current-buffers ()
+    (with-fake-interface ()
+      (testing "demote and promote single header"
+        (run-header-level-change-case
+         "demote"
+         "* alpha
+* beta"
+         0
+         :demote
+         "** alpha
+* beta")
+        (run-header-level-change-case
+         "promote"
+         "** alpha
+* beta"
+         0
+         :promote
+         "* alpha
+* beta")
+        (run-header-level-change-case
+         "promote-noop"
+         "* alpha"
+         0
+         :promote
+         "* alpha"))
+      (testing "demote and promote subtree round-trip"
+        ;; demote subtree: mixed levels, sibling not affected
+        (run-header-level-change-case
+         "demote-tree"
+         "* test
+** test2
+**** hello1
+*** hello2
+* other"
+         1
+         :demote-tree
+         "* test
+*** test2
+***** hello1
+**** hello2
+* other")
+        ;; promote it back
+        (run-header-level-change-case
+         "promote-tree"
+         "* test
+*** test2
+***** hello1
+**** hello2
+* other"
+         1
+         :promote-tree
+         "* test
+** test2
+**** hello1
+*** hello2
+* other")))))

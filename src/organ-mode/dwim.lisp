@@ -102,10 +102,12 @@
 (defun horizontal-move-context ()
   "return (values type element) for the element at cursor suitable for horizontal moves."
   (let ((table (current-text-obj-ignore-newline 'cltpt/org-mode:org-table))
-        (list (current-text-obj-ignore-newline 'cltpt/org-mode:org-list)))
+        (list (current-text-obj-ignore-newline 'cltpt/org-mode:org-list))
+        (header (find-header-at-title-line)))
     (cond
       (table (values :table table))
-      (list (values :list list)))))
+      (list (values :list list))
+      (header (values :header header)))))
 
 (defun list-obj-for-dedent (list-found)
   "return the appropriate list object for dedent. walks up to parent org-list if nested."
@@ -122,7 +124,8 @@
     (when type
       (ecase type
         (:table (org-table-move-column element -1))
-        (:list (org-list-dedent-item (list-obj-for-dedent element)))))))
+        (:list (org-list-dedent-item (list-obj-for-dedent element)))
+        (:header (org-header-level-increase element -1))))))
 
 (defmethod prefix-suffix ((p (eql *swap-left-prefix*)))
   'organ-dwim-move-left)
@@ -135,29 +138,36 @@
     (when type
       (ecase type
         (:table (org-table-move-column element 1))
-        (:list (org-list-indent-item element))))))
+        (:list (org-list-indent-item element))
+        (:header (org-header-level-increase element 1))))))
 
 (defmethod prefix-suffix ((p (eql *swap-right-prefix*)))
   'organ-dwim-move-right)
 
 (defmethod prefix-active-p ((p (eql *shift-swap-left-prefix*)))
-  (current-text-obj-ignore-newline 'cltpt/org-mode:org-list))
+  (or (current-text-obj-ignore-newline 'cltpt/org-mode:org-list)
+      (find-header-at-title-line)))
 
 (lem:define-command organ-dwim-shift-move-left () ()
-  (let ((list-found (current-text-obj-ignore-newline 'cltpt/org-mode:org-list)))
-    (when list-found
-      (org-list-dedent-tree (list-obj-for-dedent list-found)))))
+  (let ((list-found (current-text-obj-ignore-newline 'cltpt/org-mode:org-list))
+        (header (find-header-at-title-line)))
+    (cond
+      (list-found (org-list-dedent-tree (list-obj-for-dedent list-found)))
+      (header (org-header-level-increase-tree header -1)))))
 
 (defmethod prefix-suffix ((p (eql *shift-swap-left-prefix*)))
   'organ-dwim-shift-move-left)
 
 (defmethod prefix-active-p ((p (eql *shift-swap-right-prefix*)))
-  (current-text-obj-ignore-newline 'cltpt/org-mode:org-list))
+  (or (current-text-obj-ignore-newline 'cltpt/org-mode:org-list)
+      (find-header-at-title-line)))
 
 (lem:define-command organ-dwim-shift-move-right () ()
-  (let ((list-found (current-text-obj-ignore-newline 'cltpt/org-mode:org-list)))
-    (when list-found
-      (org-list-indent-tree list-found))))
+  (let ((list-found (current-text-obj-ignore-newline 'cltpt/org-mode:org-list))
+        (header (find-header-at-title-line)))
+    (cond
+      (list-found (org-list-indent-tree list-found))
+      (header (org-header-level-increase-tree header 1)))))
 
 (defmethod prefix-suffix ((p (eql *shift-swap-right-prefix*)))
   'organ-dwim-shift-move-right)
