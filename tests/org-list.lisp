@@ -8,7 +8,7 @@
 
 (register-test-suite :organ-mode-tests/org-list)
 
-(defun setup-list-move-buffer (text)
+(defun setup-list-buffer (text)
   "create a buffer with TEXT, parse the cltpt tree, switch to it,
 and return (values buffer tree list-obj) where list-obj is the first org-list object."
   (multiple-value-bind (buffer tree)
@@ -25,7 +25,7 @@ and return (values buffer tree list-obj) where list-obj is the first org-list ob
     (with-fake-interface ()
       (testing "move first item down"
         (multiple-value-bind (buffer tree list-obj)
-            (setup-list-move-buffer
+            (setup-list-buffer
              "- alpha
 - beta
 - gamma")
@@ -42,7 +42,7 @@ and return (values buffer tree list-obj) where list-obj is the first org-list ob
 - gamma")))
       (testing "move last item up"
         (multiple-value-bind (buffer tree list-obj)
-            (setup-list-move-buffer
+            (setup-list-buffer
              "- alpha
 - beta
 - gamma")
@@ -59,7 +59,7 @@ and return (values buffer tree list-obj) where list-obj is the first org-list ob
 - beta"))))
       (testing "numbered list preserves bullets"
         (multiple-value-bind (buffer tree list-obj)
-            (setup-list-move-buffer "1. alpha
+            (setup-list-buffer "1. alpha
 2. beta
 3. gamma")
           (lem:move-point (lem:current-point)
@@ -75,7 +75,7 @@ and return (values buffer tree list-obj) where list-obj is the first org-list ob
 3. gamma")))
       (testing "no-op at boundary"
         (multiple-value-bind (buffer tree list-obj)
-            (setup-list-move-buffer "- alpha
+            (setup-list-buffer "- alpha
 - beta")
           (lem:move-point (lem:current-point)
                           (organ/utils:char-offset-to-point
@@ -120,7 +120,7 @@ and return (values buffer tree list-obj) where list-obj is the first org-list ob
   (lem:with-current-buffers ()
     (with-fake-interface ()
       (multiple-value-bind (buffer tree list-obj)
-          (setup-list-move-buffer
+          (setup-list-buffer
            "1. alpha
 2. beta
 3. gamma
@@ -211,7 +211,7 @@ and return (values buffer tree list-obj) where list-obj is the first org-list ob
     (with-fake-interface ()
       ;; test 1: dedent item with children errors
       (multiple-value-bind (buffer tree list-obj)
-          (setup-list-move-buffer
+          (setup-list-buffer
            "1. hey
    1. is
       1. going
@@ -242,7 +242,7 @@ and return (values buffer tree list-obj) where list-obj is the first org-list ob
    3. heyy"))
       ;; test 3: dedent with subsequent siblings, siblings become children
       (multiple-value-bind (buffer tree list-obj)
-          (setup-list-move-buffer
+          (setup-list-buffer
            "1. hey
    1. is
       1. going
@@ -258,7 +258,7 @@ and return (values buffer tree list-obj) where list-obj is the first org-list ob
       1. wow"))
       ;; test 4: indent-item detaches children
       (multiple-value-bind (buffer tree list-obj)
-          (setup-list-move-buffer
+          (setup-list-buffer
            "1. hey
 2. is
    1. hello")
@@ -272,7 +272,7 @@ and return (values buffer tree list-obj) where list-obj is the first org-list ob
    2. hello"))
       ;; test 5: indent-tree keeps children
       (multiple-value-bind (buffer tree list-obj)
-          (setup-list-move-buffer
+          (setup-list-buffer
            "1. hey
 2. is
    1. hello")
@@ -286,7 +286,7 @@ and return (values buffer tree list-obj) where list-obj is the first org-list ob
       1. hello"))
       ;; test 6: dedent-tree
       (multiple-value-bind (buffer tree list-obj)
-          (setup-list-move-buffer
+          (setup-list-buffer
            "1. hey
    1. is
       1. going
@@ -302,7 +302,7 @@ and return (values buffer tree list-obj) where list-obj is the first org-list ob
    2. heyy"))
       ;; test 7: indent roman numeral item preserves roman bullet type
       (multiple-value-bind (buffer tree list-obj)
-          (setup-list-move-buffer
+          (setup-list-buffer
            "1. hey
    i. hey
    ii. what")
@@ -316,7 +316,7 @@ and return (values buffer tree list-obj) where list-obj is the first org-list ob
       i. what"))
       ;; test 8: dedent with bullet length change preserves cursor position
       (multiple-value-bind (buffer tree list-obj)
-          (setup-list-move-buffer
+          (setup-list-buffer
            "1. hey
    i. alpha
    ii. what
@@ -334,9 +334,43 @@ and return (values buffer tree list-obj) where list-obj is the first org-list ob
           (ok (= (lem:point-column (lem:current-point))
                  (1- col-before))
               "dedent cursor accounts for bullet length change")))
-      ;; test 9: dedent with multi-line content preserves continuation indentation
+      ;; test 9: indent then dedent preserves cursor position (unequal bullet lengths)
       (multiple-value-bind (buffer tree list-obj)
-          (setup-list-move-buffer
+          (setup-list-buffer
+           "i) hello
+ii) here
+iii) hello
+iv) dont throw")
+        (move-to-item buffer list-obj "dont throw")
+        (let ((col-before (lem:point-column (lem:current-point))))
+          ;; indent "iv)" under "iii)"
+          (organ/organ-mode::org-list-indent-item list-obj)
+          (check-buffer
+           "test9-after-indent"
+           buffer
+           "i) hello
+ii) here
+iii) hello
+     i) dont throw")
+          (ok (= (lem:point-column (lem:current-point))
+                 (+ col-before 4))
+              "indent cursor accounts for bullet length change")
+          ;; dedent back
+          (setf list-obj (reparse-list buffer))
+          (organ/organ-mode::org-list-dedent-item list-obj)
+          (check-buffer
+           "test9-after-dedent"
+           buffer
+           "i) hello
+ii) here
+iii) hello
+iv) dont throw")
+          (ok (= (lem:point-column (lem:current-point))
+                 col-before)
+              "dedent cursor restores original column")))
+      ;; test 10: dedent with multi-line content preserves continuation indentation
+      (multiple-value-bind (buffer tree list-obj)
+          (setup-list-buffer
            "1. hey
    i. alpha
    ii. what
@@ -345,16 +379,16 @@ and return (values buffer tree list-obj) where list-obj is the first org-list ob
         (move-to-item buffer list-obj "i. hellok")
         (organ/organ-mode::org-list-dedent-item list-obj)
         (check-buffer
-         "test9-dedent-multiline-content"
+         "test10-dedent-multiline-content"
          buffer
          "1. hey
    i. alpha
    ii. what
    iii. hellok
         hey"))
-      ;; test 10: indent first item errors
+      ;; test 11: indent first item errors
       (multiple-value-bind (buffer tree list-obj)
-          (setup-list-move-buffer
+          (setup-list-buffer
            "1. alpha
    1. beta
    2. gamma
@@ -366,48 +400,48 @@ and return (values buffer tree list-obj) where list-obj is the first org-list ob
                      (organ/organ-mode::org-list-indent-item list-obj)))
                    'null)
             "indent first item signals editor-error")
-        ;; test 11: dedent top-level item is no-op
+        ;; test 12: dedent top-level item is no-op
         (organ/organ-mode::org-list-dedent-item list-obj)
         (check-buffer
-         "test11-dedent-noop"
+         "test12-dedent-noop"
          buffer
          "1. alpha
    1. beta
    2. gamma
    3. delta")
-        ;; test 12: newline at end of sub-list item
-        ;; note: lines with just a bullet have a trailing space after the dot
+        ;; test 13: newline at end of sub-list item renumbers subsequent siblings
         (setf list-obj (reparse-list buffer))
         (move-to-item buffer list-obj "1. beta" t)
         (organ/organ-mode::org-list-newline)
         (check-buffer
-         "test12-newline-sublist"
+         "test13-newline-sublist"
          buffer
          "1. alpha
    1. beta
    2. 
-   2. gamma
-   3. delta")
-        ;; test 13: newline at end of top-level item
+   3. gamma
+   4. delta")
+        ;; test 14: newline at end of top-level item with children
+        ;; new sibling appears after the full subtree of the current item
         (setf list-obj (reparse-list buffer))
         (move-to-item buffer list-obj "1. alpha" t)
         (organ/organ-mode::org-list-newline)
         (check-buffer
-         "test13-newline-toplevel"
+         "test14-newline-toplevel"
          buffer
          "1. alpha
-2. 
    1. beta
    2. 
-   2. gamma
-   3. delta")))))
+   3. gamma
+   4. delta
+2. ")))))
 
 (deftest list-unordered-tests
   "indent/dedent/newline operations on unordered lists."
   (lem:with-current-buffers ()
     (with-fake-interface ()
       (multiple-value-bind (buffer tree list-obj)
-          (setup-list-move-buffer
+          (setup-list-buffer
            "- apple
 - banana
 - cherry
@@ -470,3 +504,134 @@ and return (values buffer tree list-obj) where list-obj is the first org-list ob
   - 
 - cherry
 - date")))))
+
+(deftest list-newline-top-level
+  "org-list-newline on top-level ordered lists produces correct next bullet."
+  (lem:with-current-buffers ()
+    (with-fake-interface ()
+      (testing "numeric list newline on last item"
+        (multiple-value-bind (buffer tree list-obj)
+            (setup-list-buffer
+             "1. more text
+2. more text2
+3. more lists")
+          (move-to-item buffer list-obj "3. more lists" t)
+          (organ/organ-mode::org-list-newline)
+          (check-buffer
+           "numeric-newline"
+           buffer
+           "1. more text
+2. more text2
+3. more lists
+4. ")))
+      (testing "alpha list newline on last item"
+        (multiple-value-bind (buffer tree list-obj)
+            (setup-list-buffer
+             "a. first
+b. second")
+          (move-to-item buffer list-obj "b. second" t)
+          (organ/organ-mode::org-list-newline)
+          (check-buffer
+           "alpha-newline"
+           buffer
+           "a. first
+b. second
+c. ")))
+      (testing "numeric list newline twice"
+        (multiple-value-bind (buffer tree list-obj)
+            (setup-list-buffer
+             "1. alpha
+2. beta")
+          (move-to-item buffer list-obj "2. beta" t)
+          (organ/organ-mode::org-list-newline)
+          (setf list-obj (reparse-list buffer))
+          (move-to-item buffer list-obj "3. " t)
+          (organ/organ-mode::org-list-newline)
+           (check-buffer
+            "numeric-newline-twice"
+            buffer
+            "1. alpha
+2. beta
+3. 
+4. "))))))
+
+(deftest list-newline-nested
+  "org-list-newline in nested lists produces correct indentation and bullet."
+  (lem:with-current-buffers ()
+    (with-fake-interface ()
+      (testing "newline in sub-list maintains correct indentation"
+        (multiple-value-bind (buffer tree list-obj)
+            (setup-list-buffer
+             "1. hello
+2. there
+   i. what is up
+3. test")
+          (move-to-item buffer list-obj "i. what is up" t)
+          (organ/organ-mode::org-list-newline)
+          (check-buffer
+           "newline-nested-roman"
+           buffer
+           "1. hello
+2. there
+   i. what is up
+   ii. 
+3. test")
+          ;; cursor should be at end of "   ii. " (column 7)
+          (ok (= (lem:point-column (lem:current-point)) 7)
+              "cursor placed after bullet and space"))))))
+
+(deftest list-newline-end-of-file
+  "org-list-newline on last item at end of file produces correct indentation."
+  (lem:with-current-buffers ()
+    (with-fake-interface ()
+      (testing "newline at end of top-level list at end of file"
+        (multiple-value-bind (buffer tree list-obj)
+            (setup-list-buffer
+             "1. first
+2. second
+3. third")
+          (move-to-item buffer list-obj "3. third" t)
+          (organ/organ-mode::org-list-newline)
+          (check-buffer
+           "newline-eof-toplevel"
+           buffer
+           "1. first
+2. second
+3. third
+4. ")))
+      (testing "newline at end of nested list at end of file"
+        (multiple-value-bind (buffer tree list-obj)
+            (setup-list-buffer
+             "1. hello
+2. there
+   i. what is up")
+          (move-to-item buffer list-obj "i. what is up" t)
+          (organ/organ-mode::org-list-newline)
+           (check-buffer
+            "newline-eof-nested"
+            buffer
+            "1. hello
+2. there
+   i. what is up
+   ii. "))))))
+
+(deftest list-cycle-bullet-indentation
+  "cycling bullet type adjusts sub-list indentation to match new bullet length."
+  (lem:with-current-buffers ()
+    (with-fake-interface ()
+      (testing "cycle from numeric-paren to roman adjusts sub-list indent"
+        (multiple-value-bind (buffer tree list-obj)
+            (setup-list-buffer
+             "1) hello
+2) here
+   1. hello
+   2. hey")
+          (move-to-item buffer list-obj "1) hello")
+          (organ/organ-mode::org-list-cycle-bullet list-obj)
+          (check-buffer
+           "cycle-indent-roman"
+           buffer
+           "i. hello
+ii. here
+    1. hello
+    2. hey"))))))

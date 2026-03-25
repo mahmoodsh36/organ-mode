@@ -72,6 +72,7 @@ when nil, it will only reformat the table and the cursor will remain in the last
   (:key "C-c C-d" :suffix 'organ-deadline)
   (:key "C-c C-v C-n" :suffix 'organ-next-src-block)
   (:key "C-c C-v C-p" :suffix 'organ-prev-src-block)
+  (:key "C-c -" :suffix 'organ-cycle-list-bullet)
   (:key "C-c C-e" :suffix *organ-mode-export-keymap* :description "export dispatch")
   (:key "C-c C-o" :suffix 'organ-open-at-point)
   )
@@ -249,6 +250,13 @@ when nil, it will only reformat the table and the cursor will remain in the last
          source-buffer
          'cltpt/agenda/task::record-deadline
          "New deadline"))))
+
+(lem:define-command organ-cycle-list-bullet () ()
+  "cycle the bullet type of the list at point."
+  (let ((list-obj (current-text-obj-ignore-newline 'cltpt/org-mode:org-list)))
+    (if list-obj
+        (org-list-cycle-bullet list-obj)
+        (lem:editor-error "not inside a list."))))
 
 ;; this currently only works for links that 'resolve' to filepaths
 (lem:define-command organ-open-at-point () ()
