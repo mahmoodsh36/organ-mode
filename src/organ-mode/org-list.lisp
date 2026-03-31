@@ -311,6 +311,32 @@ returns (values indent bullets) where bullets is all bullet strings up to and in
               (lem:move-to-column (lem:current-point)
                                   (max 0 (+ col bullet-delta))))))))))
 
+(defun org-list-toggle-checkbox (list-obj)
+  "toggle the checkbox on the current list item.
+cycles: unchecked -> checked -> partial -> unchecked.
+only modifies items that already have a checkbox."
+  (let ((col (lem:point-column (lem:current-point)))
+        (line (lem:line-number-at-point (lem:current-point))))
+    (multiple-value-bind (path data) (current-item-data list-obj)
+      (when path
+        (let* ((match (cltpt/base:text-object-match list-obj))
+               (indent (getf (cltpt/combinator:match-props match) :indent))
+               (lst (containing-list data path))
+               (idx (item-index-in-list path))
+               (item (nth idx (getf lst :children)))
+               (current (getf item :checkbox)))
+          (when current
+            (setf (getf item :checkbox)
+                  (ecase current
+                    (:unchecked :checked)
+                    (:checked :partial)
+                    (:partial :unchecked))))
+          (cltpt/org-mode:renumber-list-items lst)
+          (let ((new-str (cltpt/org-mode:list-to-list-string data indent)))
+            (organ/utils:replace-submatch-text* (lem:current-buffer) match new-str)
+            (lem:move-to-line (lem:current-point) line)
+            (lem:move-to-column (lem:current-point) col)))))))
+
 (defun find-item-match-at-path (list-match path)
   "navigate LIST-MATCH to return the list-item match at PATH (list of indices)."
   (let ((item (nth (first path) (cltpt/combinator:match-children list-match))))

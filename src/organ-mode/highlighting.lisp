@@ -18,6 +18,15 @@
 (lem:define-attribute organ-list-bullet-attribute
   (t :foreground :base09))
 
+(lem:define-attribute organ-checkbox-unchecked-attribute
+  (t :foreground :base03))
+
+(lem:define-attribute organ-checkbox-checked-attribute
+  (t :foreground :base0b :bold t))
+
+(lem:define-attribute organ-checkbox-partial-attribute
+  (t :foreground :base0a))
+
 (lem:define-attribute organ-table-delimiter-attribute
   (t :foreground :base03))
 
@@ -199,12 +208,29 @@
     (overlay-for-submatch buf obj 'cltpt/org-mode::drawer-open-tag 'organ-block-attribute)
     (overlay-for-submatch buf obj 'cltpt/org-mode::drawer-close-tag 'organ-block-attribute))))
 
-;; highlight only the bullet characters in lists
 (defmethod text-object-overlays ((obj cltpt/org-mode:org-list) buf)
-  (overlays-for-submatches buf
-                           obj
-                           'cltpt/org-mode::list-item-bullet
-                           'organ-list-bullet-attribute))
+  (append
+   (overlays-for-submatches buf
+                            obj
+                            'cltpt/org-mode::list-item-bullet
+                            'organ-list-bullet-attribute)
+   (let ((checkboxes (cltpt/combinator:find-submatch-all
+                      (cltpt/base:text-object-match obj)
+                      'cltpt/org-mode::list-item-checkbox)))
+     (loop for cb in checkboxes
+           for state = (getf (cltpt/combinator:match-props cb) :state)
+           for attr = (ecase state
+                        (:unchecked 'organ-checkbox-unchecked-attribute)
+                        (:checked 'organ-checkbox-checked-attribute)
+                        (:partial 'organ-checkbox-partial-attribute))
+           collect (lem:make-overlay
+                    (organ/utils:char-offset-to-point
+                     buf
+                     (cltpt/combinator:match-begin-absolute cb))
+                    (organ/utils:char-offset-to-point
+                     buf
+                     (cltpt/combinator:match-end-absolute cb))
+                    attr)))))
 
 ;; highlight vertical delimiters (pipes) and horizontal rules (separators) in tables
 (defmethod text-object-overlays ((obj cltpt/org-mode:org-table) buf)

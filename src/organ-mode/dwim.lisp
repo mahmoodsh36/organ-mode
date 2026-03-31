@@ -46,6 +46,11 @@
   :behavior :drop
   :description "shift-swap right (subtree)")
 
+(define-prefix *ctrl-c-prefix*
+  :key "C-c C-c"
+  :behavior :drop
+  :description "context-sensitive C-c C-c")
+
 (define-transient *organ-dwim-keymap*
   :description "dwim keymap"
   *swap-up-prefix*
@@ -56,7 +61,8 @@
   *shift-swap-right-prefix*
   *return-prefix*
   *tab-prefix*
-  *shift-tab-prefix*)
+  *shift-tab-prefix*
+  *ctrl-c-prefix*)
 
 (lem:keymap-add-child *organ-mode-keymap* *organ-dwim-keymap*)
 
@@ -209,3 +215,16 @@
 
 (defmethod prefix-suffix ((p (eql *return-prefix*)))
   'organ-dwim-return)
+
+(defmethod prefix-active-p ((p (eql *ctrl-c-prefix*)))
+  (current-text-obj-ignore-newline 'cltpt/org-mode:org-list))
+
+(lem:define-command organ-ctrl-c-ctrl-c () ()
+  "context-sensitive command bound to C-c C-c."
+  (let ((list-obj (current-text-obj-ignore-newline 'cltpt/org-mode:org-list)))
+    (cond
+      (list-obj (org-list-toggle-checkbox list-obj))
+      (t (lem:editor-error "nothing to do here.")))))
+
+(defmethod prefix-suffix ((p (eql *ctrl-c-prefix*)))
+  'organ-ctrl-c-ctrl-c)
