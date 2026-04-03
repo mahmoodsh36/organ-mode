@@ -46,11 +46,6 @@
   :behavior :drop
   :description "shift-swap right (subtree)")
 
-(define-prefix *ctrl-c-prefix*
-  :key "C-c C-c"
-  :behavior :drop
-  :description "context-sensitive C-c C-c")
-
 (define-transient *organ-dwim-keymap*
   :description "dwim keymap"
   *swap-up-prefix*
@@ -61,8 +56,17 @@
   *shift-swap-right-prefix*
   *return-prefix*
   *tab-prefix*
-  *shift-tab-prefix*
-  *ctrl-c-prefix*)
+  *shift-tab-prefix*)
+
+;; ideally this should be assigned in `*organ-dwim-keymap*' but this would cause issues with
+;; preexisting C-c bindings in the parent `*organ-mode-keymap*' since it would focus the dwim
+;; keymap when C-c is pressed.
+(lem/transient:define-transient-key
+ *ctrl-c-ctrl-c-prefix*
+ *organ-mode-keymap*
+ "C-c C-c"
+ :behavior :drop
+ :description "context-sensitive C-c C-c")
 
 (lem:keymap-add-child *organ-mode-keymap* *organ-dwim-keymap*)
 
@@ -216,7 +220,7 @@
 (defmethod prefix-suffix ((p (eql *return-prefix*)))
   'organ-dwim-return)
 
-(defmethod prefix-active-p ((p (eql *ctrl-c-prefix*)))
+(defmethod prefix-active-p ((p (eql *ctrl-c-ctrl-c-prefix*)))
   (current-text-obj-ignore-newline 'cltpt/org-mode:org-list))
 
 (lem:define-command organ-ctrl-c-ctrl-c () ()
@@ -226,5 +230,5 @@
       (list-obj (org-list-toggle-checkbox list-obj))
       (t (lem:editor-error "nothing to do here.")))))
 
-(defmethod prefix-suffix ((p (eql *ctrl-c-prefix*)))
+(defmethod prefix-suffix ((p (eql *ctrl-c-ctrl-c-prefix*)))
   'organ-ctrl-c-ctrl-c)

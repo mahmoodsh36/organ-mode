@@ -162,7 +162,7 @@
              (lem:message "published to ~A" output-dir)))))))
 
 ;; register publish keymap into the global organ keymap.
-(lem/transient:define-transient-key
+(lem/transient:assign-transient-key
  organ:*organ-keymap*
  "c"
  (list :description "publish (export-all)" :suffix *publish-keymap*))

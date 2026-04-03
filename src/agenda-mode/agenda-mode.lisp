@@ -55,10 +55,9 @@
   :description "organ-mode keymap"
   (:key "Return" :suffix 'agenda-mode-follow)
   (:key "C-c C-s" :suffix 'agenda-schedule)
-  (:key "C-c C-d" :suffix 'agenda-deadline)
-  (:key "C-c C-t" :suffix 'agenda-mode-change-task-state))
+  (:key "C-c C-d" :suffix 'agenda-deadline))
 
-(lem/transient:define-transient-key organ/organ-mode:*organ-mode-keymap* "C-c C-t"
+(lem/transient:assign-transient-key organ/organ-mode:*organ-mode-keymap* "C-c C-t"
   (list :suffix ''agenda-mode-change-task-state))
 
 (lem:define-major-mode agenda-mode organ/outline-mode:outline-mode
