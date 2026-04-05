@@ -635,3 +635,101 @@ c. ")))
 ii. here
     1. hello
     2. hey"))))))
+
+(deftest list-checkbox-parent-propagation
+  "toggling a child checkbox updates checkbox-bearing parents."
+  (lem:with-current-buffers ()
+    (with-fake-interface ()
+      (testing "direct parent becomes partial then checked"
+        (multiple-value-bind (buffer tree list-obj)
+            (setup-list-buffer
+             "- [ ] parent
+  - [ ] child one
+  - [ ] child two")
+          (move-to-item buffer list-obj "- [ ] child one")
+          (organ/organ-mode::org-list-toggle-checkbox list-obj)
+          (check-buffer
+           "checkbox-parent-partial"
+           buffer
+           "- [-] parent
+  - [X] child one
+  - [ ] child two")
+          (setf list-obj (reparse-list buffer))
+          (move-to-item buffer list-obj "- [ ] child two")
+          (organ/organ-mode::org-list-toggle-checkbox list-obj)
+          (check-buffer
+           "checkbox-parent-checked"
+           buffer
+           "- [X] parent
+  - [X] child one
+  - [X] child two")))
+      (testing "ancestor propagation continues upward"
+        (multiple-value-bind (buffer tree list-obj)
+            (setup-list-buffer
+             "- [ ] top
+  - [ ] mid
+    - [ ] leaf one
+    - [ ] leaf two")
+          (move-to-item buffer list-obj "- [ ] leaf one")
+          (organ/organ-mode::org-list-toggle-checkbox list-obj)
+          (check-buffer
+           "checkbox-ancestor-partial"
+           buffer
+           "- [-] top
+  - [-] mid
+    - [X] leaf one
+    - [ ] leaf two")
+          (setf list-obj (reparse-list buffer))
+          (move-to-item buffer list-obj "- [ ] leaf two")
+          (organ/organ-mode::org-list-toggle-checkbox list-obj)
+          (check-buffer
+           "checkbox-ancestor-checked"
+           buffer
+           "- [X] top
+  - [X] mid
+    - [X] leaf one
+    - [X] leaf two")))
+      (testing "toggling a checkbox item with children recomputes from its subtree"
+        (multiple-value-bind (buffer tree list-obj)
+            (setup-list-buffer
+             "- [ ] we have \\(x=y\\)
+  a. [ ] nested item one
+     more nested text
+     1. [ ] test1
+     2. [X] test2
+  b. [-] nested item two
+- [X] item three")
+          (move-to-item buffer list-obj "a. [ ] nested item one")
+          (organ/organ-mode::org-list-toggle-checkbox list-obj)
+          (check-buffer
+           "checkbox-self-recompute-from-children"
+           buffer
+           "- [-] we have \\(x=y\\)
+  a. [-] nested item one
+     more nested text
+     1. [ ] test1
+     2. [X] test2
+  b. [-] nested item two
+- [X] item three")))
+      (testing "toggling a deep child updates checked and partial ancestors correctly"
+        (multiple-value-bind (buffer tree list-obj)
+            (setup-list-buffer
+             "- [ ] we have \\(x=y\\)
+  a. [ ] nested item one
+     more nested text
+     1. [ ] test1
+     2. [X] test2
+  b. [-] nested item two
+- [X] item three")
+          (move-to-item buffer list-obj "1. [ ] test1")
+          (organ/organ-mode::org-list-toggle-checkbox list-obj)
+          (check-buffer
+           "checkbox-deep-child-upward-propagation"
+           buffer
+           "- [-] we have \\(x=y\\)
+  a. [X] nested item one
+     more nested text
+     1. [X] test1
+     2. [X] test2
+  b. [-] nested item two
+- [X] item three"))))))

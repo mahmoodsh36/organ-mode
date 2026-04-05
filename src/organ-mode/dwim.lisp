@@ -126,6 +126,16 @@
                       'cltpt/org-mode:org-list)))
     (or parent-list list-found)))
 
+(defun list-obj-for-checkbox-toggle (list-found)
+  "return the outermost containing org-list for checkbox propagation."
+  (loop with current = list-found
+        for parent-list = (organ/utils:find-parent-of-type
+                           (cltpt/base:text-object-parent current)
+                           'cltpt/org-mode:org-list)
+        while parent-list
+        do (setf current parent-list)
+        finally (return current)))
+
 (defmethod prefix-active-p ((p (eql *swap-left-prefix*)))
   (horizontal-move-context))
 
@@ -227,7 +237,7 @@
   "context-sensitive command bound to C-c C-c."
   (let ((list-obj (current-text-obj-ignore-newline 'cltpt/org-mode:org-list)))
     (cond
-      (list-obj (org-list-toggle-checkbox list-obj))
+      (list-obj (org-list-toggle-checkbox (list-obj-for-checkbox-toggle list-obj)))
       (t (lem:editor-error "nothing to do here.")))))
 
 (defmethod prefix-suffix ((p (eql *ctrl-c-ctrl-c-prefix*)))

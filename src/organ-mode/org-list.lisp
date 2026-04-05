@@ -43,6 +43,34 @@ e.g. (2) for top-level item at index 2, (0 1) for the second child of the first 
   "return the index of the item within its containing list."
   (car (last path)))
 
+(defun aggregate-child-checkbox-state (children-lst)
+  "compute the aggregate checkbox state for CHILDREN-LST.
+returns `nil' when none of the children have checkboxes."
+  (let ((states (remove nil
+                        (mapcar (lambda (item) (getf item :checkbox))
+                                (getf children-lst :children)))))
+    (when states
+      (if (every (lambda (state) (eq state :checked)) states)
+          :checked
+          (if (some (lambda (state)
+                      (or (eq state :checked) (eq state :partial)))
+                    states)
+              :partial
+              :unchecked)))))
+
+(defun update-checkboxes-upward (data path)
+  "recompute checkbox states for ancestors in PATH that have checkboxes."
+  (loop for current-path = (butlast path) then (butlast current-path)
+        while current-path
+        do (let* ((current-lst (containing-list data current-path))
+                  (current-idx (item-index-in-list current-path))
+                  (current-item (nth current-idx (getf current-lst :children)))
+                  (children-lst (getf current-item :children))
+                  (aggregate-state (and children-lst
+                                        (aggregate-child-checkbox-state children-lst))))
+             (when (and aggregate-state (getf current-item :checkbox))
+               (setf (getf current-item :checkbox) aggregate-state)))))
+
 (defun indent-item-in-list (lst item-idx &key with-children)
   "indent the item at ITEM-IDX in list LST, making it a child of its previous sibling.
 when WITH-CHILDREN is nil, the item's children are detached and placed as siblings of the item
@@ -324,13 +352,18 @@ only modifies items that already have a checkbox."
                (lst (containing-list data path))
                (idx (item-index-in-list path))
                (item (nth idx (getf lst :children)))
-               (current (getf item :checkbox)))
+               (current (getf item :checkbox))
+               (children-lst (getf item :children))
+               (aggregate-state (aggregate-child-checkbox-state children-lst)))
           (when current
-            (setf (getf item :checkbox)
-                  (ecase current
-                    (:unchecked :checked)
-                    (:checked :partial)
-                    (:partial :unchecked))))
+            (if aggregate-state
+                (setf (getf item :checkbox) aggregate-state)
+                (setf (getf item :checkbox)
+                      (ecase current
+                        (:unchecked :checked)
+                        (:checked :partial)
+                        (:partial :unchecked)))))
+          (update-checkboxes-upward data path)
           (cltpt/org-mode:renumber-list-items lst)
           (let ((new-str (cltpt/org-mode:list-to-list-string data indent)))
             (organ/utils:replace-submatch-text* (lem:current-buffer) match new-str)
