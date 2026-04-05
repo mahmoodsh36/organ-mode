@@ -341,7 +341,8 @@ returns (values indent bullets) where bullets is all bullet strings up to and in
 
 (defun org-list-toggle-checkbox (list-obj)
   "toggle the checkbox on the current list item.
-cycles: unchecked -> checked -> partial -> unchecked.
+leaf items toggle between unchecked and checked.
+items with children that have checkboxes recompute from their subtree.
 only modifies items that already have a checkbox."
   (let ((col (lem:point-column (lem:current-point)))
         (line (lem:line-number-at-point (lem:current-point))))
@@ -361,7 +362,7 @@ only modifies items that already have a checkbox."
                 (setf (getf item :checkbox)
                       (ecase current
                         (:unchecked :checked)
-                        (:checked :partial)
+                        (:checked :unchecked)
                         (:partial :unchecked)))))
           (update-checkboxes-upward data path)
           (cltpt/org-mode:renumber-list-items lst)

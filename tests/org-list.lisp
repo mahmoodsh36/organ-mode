@@ -732,4 +732,26 @@ ii. here
      1. [X] test1
      2. [X] test2
   b. [-] nested item two
-- [X] item three"))))))
+- [X] item three")))
+      (testing "toggling a checked leaf works properly"
+        (multiple-value-bind (buffer tree list-obj)
+            (setup-list-buffer
+             "- [ ] we have \\(x=y\\)
+  a. [ ] nested item one
+     more nested text
+     1. [ ] test1
+     2. [X] test2
+  b. [-] nested item two
+- [X] item three")
+          (move-to-item buffer list-obj "- [X] item three")
+          (organ/organ-mode::org-list-toggle-checkbox list-obj)
+          (check-buffer
+           "checkbox-leaf-toggle-does-not-become-partial"
+           buffer
+           "- [ ] we have \\(x=y\\)
+  a. [ ] nested item one
+     more nested text
+     1. [ ] test1
+     2. [X] test2
+  b. [-] nested item two
+- [ ] item three"))))))
