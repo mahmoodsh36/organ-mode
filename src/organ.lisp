@@ -1,7 +1,10 @@
 (defpackage :organ
   (:use :cl :lem :lem/transient)
-  (:export :*organ-files* :*agenda-timestamp-range* :*organ-keymap*
-           :*roam-list-nodes-format*))
+  (:export
+   :*organ-files*
+   :*agenda-timestamp-range* :*agenda-include-done* :*agenda-first-repeat-only*
+   :*organ-keymap*
+   :*roam-list-nodes-format*))
 
 (in-package :organ)
 

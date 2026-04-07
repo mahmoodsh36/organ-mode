@@ -122,7 +122,7 @@ where indent-change is the content-offset at the new child level, or nil on fail
     (multiple-value-bind (path data) (current-item-data list-obj)
       (when path
         (let* ((match (cltpt/base:text-object-match list-obj))
-               (indent (or (getf (cltpt/combinator:match-props match) :indent) 0))
+               (indent (getf (cltpt/combinator:match-props match) :indent))
                (lst (containing-list data path))
                (idx (item-index-in-list path)))
           (multiple-value-bind (indent-change old-bullet new-bullet)
@@ -195,7 +195,7 @@ always adopts subsequent siblings. when ERROR-ON-CHILDREN, errors if item has ch
     (multiple-value-bind (path data) (current-item-data list-obj)
       (when (and path (> (length path) 1))
         (let* ((match (cltpt/base:text-object-match list-obj))
-               (indent (or (getf (cltpt/combinator:match-props match) :indent) 0))
+               (indent (getf (cltpt/combinator:match-props match) :indent))
                (sub-idx (item-index-in-list path))
                (parent-path (butlast path))
                (parent-lst (containing-list data parent-path))
@@ -236,7 +236,7 @@ swaps only the content portion, keeping bullets and indentation in place."
   (let* ((match (cltpt/base:text-object-match list-obj))
          (buf-text (lem:buffer-text (lem:current-buffer)))
          (data (cltpt/org-mode:list-match-to-list buf-text match))
-         (indent (or (getf (cltpt/combinator:match-props match) :indent) 0))
+         (indent (getf (cltpt/combinator:match-props match) :indent))
          (items (cltpt/combinator:match-children match))
          (pos (organ/utils:current-pos))
          (idx (loop for item in items
@@ -298,7 +298,7 @@ returns (values indent bullets) where bullets is all bullet strings up to and in
                                 (<= (cltpt/combinator:match-begin-absolute sub-list) pos)
                                 (<= pos (cltpt/combinator:match-end-absolute sub-list)))
                            (list-match-item-info sub-list buf-text pos)
-                           (values (or (getf (cltpt/combinator:match-props item) :indent) 0)
+                           (values (getf (cltpt/combinator:match-props item) :indent)
                                    (nreverse bullets)))))))
 
 (defun list-item-info (list-obj)
@@ -316,7 +316,7 @@ returns (values indent bullets) where bullets is all bullet strings up to and in
     (multiple-value-bind (path data) (current-item-data list-obj)
       (when path
         (let* ((match (cltpt/base:text-object-match list-obj))
-               (indent (or (getf (cltpt/combinator:match-props match) :indent) 0))
+               (indent (getf (cltpt/combinator:match-props match) :indent))
                (lst (containing-list data path))
                (items (getf lst :children))
                (idx (item-index-in-list path))
@@ -390,7 +390,7 @@ only modifies items that already have a checkbox."
     (multiple-value-bind (path data) (current-item-data list-obj)
       (when path
         (let* ((match (cltpt/base:text-object-match list-obj))
-               (root-indent (or (getf (cltpt/combinator:match-props match) :indent) 0))
+               (root-indent (getf (cltpt/combinator:match-props match) :indent))
                (lst (containing-list data path))
                (items (getf lst :children))
                (idx (item-index-in-list path))
@@ -417,7 +417,7 @@ only modifies items that already have a checkbox."
                                    (find-item-match-at-path new-list-match new-path)))
                  (list-start (cltpt/combinator:match-begin-absolute match))
                  (item-indent (when new-item-match
-                                (or (getf (cltpt/combinator:match-props new-item-match) :indent) 0)))
+                                (getf (cltpt/combinator:match-props new-item-match) :indent)))
                  (cursor-pos (when new-item-match
                                (+ list-start
                                   (cltpt/combinator:match-begin-absolute new-item-match)
