@@ -93,7 +93,7 @@ where indent-change is the content-offset at the new child level, or nil on fail
           (setf (getf item :bullet)
                 (if prev-children-lst
                     (cltpt/org-mode:bullet-at-index prev-children-lst
-                                                     (length existing-items))
+                                                    (length existing-items))
                     (let ((bt (getf lst :type)))
                       (if (and bt (getf bt :first-bullet))
                           (getf bt :first-bullet)

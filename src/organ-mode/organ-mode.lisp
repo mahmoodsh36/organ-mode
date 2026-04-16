@@ -4,7 +4,8 @@
    :organ-mode
    :current-tree
    :*log-reschedule*
-   :*organ-mode-keymap*))
+   :*organ-mode-keymap*
+   :organ-open-attach-dir))
 
 (in-package :organ/organ-mode)
 
@@ -75,6 +76,7 @@ when nil, it will only reformat the table and the cursor will remain in the last
   (:key "C-c -" :suffix 'organ-cycle-list-bullet)
   (:key "C-c C-e" :suffix *organ-mode-export-keymap* :description "export dispatch")
   (:key "C-c C-o" :suffix 'organ-open-at-point)
+  (:key "C-c C-a" :suffix 'organ-open-attach-dir :description "open attach dir")
   )
 
 (defvar *organ-mode-hook*
@@ -322,3 +324,22 @@ returns the temp file path."
   "export the current buffer to html and open it externally."
   (let ((html-file (convert-to-file cltpt:*html*)))
     (organ/utils:open-file-externally html-file)))
+
+(lem:define-command organ-open-attach-dir () ()
+  "open the attach data directory for the current org file.
+the attach dir is resolved via `cltpt/base:*id-to-attach-dir-func*'."
+  (let* ((tree (current-tree))
+         (id (when tree
+               (cltpt/base:text-object-property tree :id)))
+         (filepath (lem:buffer-filename (lem:current-buffer))))
+    (cond
+      ((null id)
+       (lem:message "no id found in current buffer"))
+      ((null filepath)
+       (lem:message "current buffer has no associated directory"))
+      (t
+       (let ((attach-dir (cltpt/file-utils:as-dir-path
+                          (funcall cltpt/base:*id-to-attach-dir-func*
+                                   filepath
+                                   id))))
+         (lem:switch-to-buffer (lem:find-file-buffer attach-dir)))))))
