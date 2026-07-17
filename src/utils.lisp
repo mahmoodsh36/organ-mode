@@ -47,10 +47,13 @@ can be set to a string (e.g., \"firefox\") or a list (e.g., '(\"firefox\" \"--ne
   (point-to-char-offset (lem:current-point)))
 
 (defun current-pos-no-newline ()
-  "return the current cursor position, backing up one character if on a newline."
+  "return the current cursor position, backing up one character if on a newline.
+an empty line has no character to back onto, so the position is returned as-is rather than
+crossing onto the previous line's newline."
   (let ((raw-pos (current-pos)))
     (if (and (> raw-pos 0)
-             (lem:end-line-p (lem:current-point)))
+             (lem:end-line-p (lem:current-point))
+             (not (lem:start-line-p (lem:current-point))))
         (1- raw-pos)
         raw-pos)))
 

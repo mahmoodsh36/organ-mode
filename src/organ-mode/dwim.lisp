@@ -199,23 +199,26 @@
         (and list-found (lem:end-line-p (lem:current-point))))))
 
 (defmethod prefix-active-p ((p (eql *tab-prefix*)))
-  (current-text-obj-ignore-newline 'cltpt/org-mode:org-table))
+  (or (current-text-obj-ignore-newline 'cltpt/org-mode:org-table)
+      (organ-foldable-at-point)))
 
 (lem:define-command organ-dwim-tab () ()
   (let ((table-found (current-text-obj-ignore-newline 'cltpt/org-mode:org-table)))
-    (when table-found
-      (org-table-navigate table-found 1 0))))
+    (cond
+      (table-found (org-table-navigate table-found 1 0))
+      ((organ-foldable-at-point) (organ-fold-toggle)))))
 
 (defmethod prefix-suffix ((p (eql *tab-prefix*)))
   'organ-dwim-tab)
 
 (defmethod prefix-active-p ((p (eql *shift-tab-prefix*)))
-  (current-text-obj-ignore-newline 'cltpt/org-mode:org-table))
+  t)
 
 (lem:define-command organ-dwim-shift-tab () ()
   (let ((table-found (current-text-obj-ignore-newline 'cltpt/org-mode:org-table)))
-    (when table-found
-      (org-table-navigate table-found -1 0))))
+    (if table-found
+        (org-table-navigate table-found -1 0)
+        (organ-fold-cycle-global))))
 
 (defmethod prefix-suffix ((p (eql *shift-tab-prefix*)))
   'organ-dwim-shift-tab)

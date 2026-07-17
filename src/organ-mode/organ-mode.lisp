@@ -5,7 +5,14 @@
    :current-tree
    :*log-reschedule*
    :*organ-mode-keymap*
-   :organ-open-attach-dir))
+   :organ-open-attach-dir
+   :organ-element-foldable-p
+   :organ-element-fold
+   :organ-fold-region
+   :organ-fold-toggle
+   :organ-fold-all
+   :organ-unfold-all
+   :organ-fold-cycle-global))
 
 (in-package :organ/organ-mode)
 

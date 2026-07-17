@@ -383,8 +383,13 @@
                                       :syntax-table syntax-table
                                       :recursive-check nil))))))))
 
+(defun clear-non-fold-overlays (buf)
+  (dolist (ov (lem:buffer-overlays buf))
+    (unless (lem:overlay-get ov :fold)
+      (lem:delete-overlay ov))))
+
 (defun organ-redraw-buffer (buf)
-  (lem:clear-overlays buf)
+  (clear-non-fold-overlays buf)
   ;; clear previous syntax highlighting done by syntax-scan-region
   (let ((start (lem:buffer-start-point buf))
         (end (lem:buffer-end-point buf)))

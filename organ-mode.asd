@@ -23,6 +23,7 @@
                              (:file "org-list")
                              (:file "org-table")
                              (:file "move")
+                             (:file "fold")
                              (:file "dwim")
                              (:file "vi")
                              ))
