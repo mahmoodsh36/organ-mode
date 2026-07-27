@@ -101,6 +101,15 @@
 
 (lem:define-key lem:*global-keymap* "C-c r" *organ-keymap*)
 
+(defun roam-node-completion-items (nodes details)
+  (let ((start (lem/prompt-window::current-prompt-start-point)))
+    (loop for node in nodes
+          for detail in details
+          collect (lem/completion-mode:make-completion-item
+                   :label (cltpt/roam:node-title node)
+                   :detail detail
+                   :start start))))
+
 (lem:define-command roam-find () ()
   (if *organ-files*
       (let* ((rmr (cltpt/roam:roamer-from-files *organ-files*))
@@ -113,39 +122,49 @@
                                          (class-name
                                           (class-of
                                            (cltpt/roam:node-text-obj node)))))))
-             (items
+             (details
                (loop for node in titled-nodes
-                     collect (lem/completion-mode:make-completion-item
-                              :label (cltpt/roam:node-title node)
-                              :detail (format nil "~v@<~@[~A~]~>  ~A"
-                                              type-width
-                                              (when (cltpt/roam:node-text-obj node)
-                                                (symbol-name
-                                                 (class-name
-                                                  (class-of
-                                                   (cltpt/roam:node-text-obj node)))))
-                                              (file-namestring (cltpt/roam:node-file node))))))
+                     collect (format nil
+                                     "~v@<~@[~A~]~>  ~A"
+                                     type-width
+                                     (when (cltpt/roam:node-text-obj node)
+                                       (symbol-name
+                                        (class-name
+                                         (class-of
+                                          (cltpt/roam:node-text-obj node)))))
+                                     (file-namestring (cltpt/roam:node-file node)))))
              (choice-str
                (lem:prompt-for-string
                 "roam-find (node) "
+                ;; the items are rebuilt on each keystroke: they carry points into the prompt,
+                ;; and its end moves as it is typed into. we have to do it this way because
+                ;; currently lem is dumb about entries with spaces in them.
                 :completion-function (lambda (x)
                                        (lem:completion-strings
                                         x
-                                        items
-                                        :key #'lem/completion-mode:completion-item-label))))
+                                        (roam-node-completion-items titled-nodes details)
+                                        :key #'lem/completion-mode:completion-item-label))
+                ;; refuse text that isnt a node title
+                :test-function (lambda (x)
+                                 (find x
+                                       titled-nodes
+                                       :key #'cltpt/roam:node-title
+                                       :test #'string=))))
              ;; this is problematic because it doesnt work well with duplicates
              (choice-idx (position choice-str
-                                   items
-                                   :key #'lem/completion-mode:completion-item-label
-                                   :test #'string=))
-             (choice (elt titled-nodes choice-idx))
-             (dest-file (cltpt/roam:node-file choice))
-             (text-obj (cltpt/roam:node-text-obj choice)))
-        (let ((buffer (lem:find-file-buffer dest-file)))
-          (lem:switch-to-buffer buffer)
-          (when text-obj
-            (lem:move-to-position (lem:current-point)
-                                  (1+ (cltpt/base:text-object-begin-in-root text-obj))))))
+                                   titled-nodes
+                                   :key #'cltpt/roam:node-title
+                                   :test #'string=)))
+        (if (null choice-idx)
+            (lem:editor-error "no node titled ~S." choice-str)
+            (let* ((choice (elt titled-nodes choice-idx))
+                   (dest-file (cltpt/roam:node-file choice))
+                   (text-obj (cltpt/roam:node-text-obj choice))
+                   (buffer (lem:find-file-buffer dest-file)))
+              (lem:switch-to-buffer buffer)
+              (when text-obj
+                (lem:move-to-position (lem:current-point)
+                                      (1+ (cltpt/base:text-object-begin-in-root text-obj)))))))
       (lem:message "you must customize *organ-files* first.")))
 
 (defvar *roam-list-nodes-format*
