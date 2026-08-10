@@ -14,7 +14,6 @@
    :organ-unfold-all
    :organ-fold-cycle-global
    :organ-latex-preview-mode
-   :organ-latex-preview-buffer
    :organ-latex-preview-regenerate
    :*organ-latex-preview-auto*
    :*organ-latex-preview-foreground*
