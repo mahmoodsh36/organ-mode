@@ -12,7 +12,14 @@
    :organ-fold-toggle
    :organ-fold-all
    :organ-unfold-all
-   :organ-fold-cycle-global))
+   :organ-fold-cycle-global
+   :organ-latex-preview-mode
+   :organ-latex-preview-buffer
+   :organ-latex-preview-regenerate
+   :*organ-latex-preview-auto*
+   :*organ-latex-preview-foreground*
+   :*organ-latex-preview-types*
+   :*organ-latex-preview-debounce*))
 
 (in-package :organ/organ-mode)
 
@@ -84,6 +91,17 @@ when nil, it will only reformat the table and the cursor will remain in the last
   (:key "C-c C-e" :suffix *organ-mode-export-keymap* :description "export dispatch")
   (:key "C-c C-o" :suffix 'organ-open-at-point)
   (:key "C-c C-a" :suffix 'organ-open-attach-dir :description "open attach dir")
+  (:key "C-c C-x l"
+   :description "latex preview dispatch"
+   :suffix (:keymap
+            :display-style :column
+            :description "organ-mode latex previews"
+            (:key "m"
+             :suffix 'organ-latex-preview-mode
+             :description "toggle previewing the whole buffer as it changes")
+            (:key "r"
+             :suffix 'organ-latex-preview-regenerate
+             :description "recompile, ignoring the preview cache")))
   )
 
 (defvar *organ-mode-hook*

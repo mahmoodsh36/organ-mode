@@ -56,3 +56,11 @@
                (or (pos-on-first-line-of-obj-p blk pos)
                    (pos-on-last-line-of-obj-p blk pos)))
       blk)))
+(defun show-text-buffer (name text)
+  "show TEXT in the buffer called NAME, replacing whatever was in it, and return the buffer."
+  (let ((buffer (lem:make-buffer name)))
+    (lem:erase-buffer buffer)
+    (lem:with-current-buffer buffer
+      (lem:insert-string (lem:buffer-start-point buffer) text))
+    (lem:pop-to-buffer buffer)
+    buffer))

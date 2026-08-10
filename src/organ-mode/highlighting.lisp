@@ -383,23 +383,33 @@
                                       :syntax-table syntax-table
                                       :recursive-check nil))))))))
 
-(defun clear-non-fold-overlays (buf)
+(defun clear-highlight-overlays (buf)
+  "remove the syntax overlays the last redraw of BUF created."
   (dolist (ov (lem:buffer-overlays buf))
-    (unless (lem:overlay-get ov :fold)
+    (when (lem:overlay-get ov :organ-highlight)
       (lem:delete-overlay ov))))
 
 (defun organ-redraw-buffer (buf)
-  (clear-non-fold-overlays buf)
+  (clear-highlight-overlays buf)
   ;; clear previous syntax highlighting done by syntax-scan-region
   (let ((start (lem:buffer-start-point buf))
         (end (lem:buffer-end-point buf)))
     (lem:remove-text-property start end :attribute)
     (lem:clear-region-major-mode start end))
-  (cltpt/base:map-text-object-with-pos-in-root
-   (lem:buffer-value buf 'cltpt-tree)
-   (lambda (obj parent-pos)
-     (setf (cltpt/base:text-object-property obj :parent-pos) parent-pos)
-     (text-object-overlays obj buf)
-     ;; apply language-specific syntax highlighting for src blocks
-     (when (typep obj 'cltpt/org-mode:org-src-block)
-       (apply-src-block-syntax-highlighting obj buf)))))
+  (let ((existing (make-hash-table :test 'eq)))
+    (dolist (ov (lem:buffer-overlays buf))
+      (setf (gethash ov existing) t))
+    (cltpt/base:map-text-object-with-pos-in-root
+     (lem:buffer-value buf 'cltpt-tree)
+     (lambda (obj parent-pos)
+       (setf (cltpt/base:text-object-property obj :parent-pos) parent-pos)
+       (text-object-overlays obj buf)
+       ;; apply language-specific syntax highlighting for src blocks
+       (when (typep obj 'cltpt/org-mode:org-src-block)
+         (apply-src-block-syntax-highlighting obj buf))))
+    ;; whatever appeared while drawing belongs to this redraw, and is what the next one clears.
+    ;; tagging by difference rather than at each `lem:make-overlay' means the tag is applied in
+    ;; one place instead of everywhere an overlay is created.
+    (dolist (ov (lem:buffer-overlays buf))
+      (unless (gethash ov existing)
+        (lem:overlay-put ov :organ-highlight t)))))

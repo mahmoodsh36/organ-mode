@@ -24,6 +24,7 @@
                              (:file "org-table")
                              (:file "move")
                              (:file "fold")
+                             (:file "latex-preview")
                              (:file "dwim")
                              (:file "vi")
                              ))
