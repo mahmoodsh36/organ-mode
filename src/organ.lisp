@@ -4,7 +4,8 @@
    :*organ-files*
    :*agenda-timestamp-range* :*agenda-include-done* :*agenda-first-repeat-only*
    :*organ-keymap*
-   :*roam-list-nodes-format*))
+   :*roam-list-nodes-format*
+   :*roam-cache-enabled* :*roam-cache-ttl* :roam-cache-invalidate))
 
 (in-package :organ)
 
@@ -23,6 +24,56 @@
 (defvar *agenda-first-repeat-only*
   nil
   "when non-nil, show only the first occurrence of each repeating task in the agenda view.")
+
+(defvar *roam-cache-enabled*
+  t
+  "when non-nil, parsed roam nodes are kept in memory instead of rescanned on every command.")
+
+(defvar *roam-cache-ttl*
+  15
+  "seconds after which the cached roamer is considered stale and rescanned. nil means it never expires.")
+
+(defvar *roam-cache*
+  nil
+  "the cached `cltpt/roam:roamer', or nil.")
+
+(defvar *roam-cache-time*
+  nil
+  "universal time at which `*roam-cache*' was last (re)scanned.")
+
+(defun roam-cache-invalidate ()
+  "drop the cached roamer so the next command rescans."
+  (setf *roam-cache* nil
+        *roam-cache-time* nil))
+
+(defun roam-cache-stale-p ()
+  (or (null *roam-cache*)
+      (not (equal (cltpt/roam:roamer-files *roam-cache*) *organ-files*))
+      (and *roam-cache-ttl*
+           (> (- (get-universal-time) *roam-cache-time*) *roam-cache-ttl*))))
+
+(defun current-roamer (&key force-rescan)
+  "return a roamer for `*organ-files*', reuses cache unless it is stale or FORCE-RESCAN is T."
+  (if (not *roam-cache-enabled*)
+      (cltpt/roam:roamer-from-files *organ-files*)
+      (progn
+        (when (or force-rescan (roam-cache-stale-p))
+          (if (and *roam-cache*
+                   (equal (cltpt/roam:roamer-files *roam-cache*) *organ-files*))
+              ;; same files, rescan without creating a new roamer
+              (cltpt/roam:roamer-rescan *roam-cache*)
+              (setf *roam-cache* (cltpt/roam:roamer-from-files *organ-files*)))
+          (setf *roam-cache-time* (get-universal-time)))
+        *roam-cache*)))
+
+(lem:define-command roam-refresh () ()
+  "rescan the roam files, discarding the cache."
+  (if *organ-files*
+      (progn
+        (current-roamer :force-rescan t)
+        (lem:message "rescanned ~A roam nodes."
+                     (length (cltpt/roam:roamer-nodes *roam-cache*))))
+      (lem:message "you must customize *organ-files* first.")))
 
 ;; custom infix type for prompting a timestamp range via two date inputs.
 (defclass lem/transient::timestamp-range (lem/transient::infix)
@@ -94,9 +145,14 @@
     (:keymap
      :description "roam actions"
      (:key "r" :suffix 'roam-find :description "browse nodes")
-     (:key "l" :suffix 'roam-list-nodes :description "list nodes"))
+     (:key "l" :suffix 'roam-list-nodes :description "list nodes")
+     (:key "g" :suffix 'roam-refresh :description "rescan nodes"))
     (:keymap
      :description "roam options"
+     (:key "c"
+      :type 'toggle
+      :description "cache nodes"
+      :variable '*roam-cache-enabled*)
      (:key "f" :suffix 'test :description "roam files (not yet implemented)" :active-p nil)))))
 
 (lem:define-key lem:*global-keymap* "C-c r" *organ-keymap*)
@@ -112,7 +168,7 @@
 
 (lem:define-command roam-find () ()
   (if *organ-files*
-      (let* ((rmr (cltpt/roam:roamer-from-files *organ-files*))
+      (let* ((rmr (current-roamer))
              (titled-nodes
                (remove-if-not #'cltpt/roam:node-title (cltpt/roam:roamer-nodes rmr)))
              (type-width
@@ -219,7 +275,7 @@ uses `cltpt:convert-simple-format' with :title, :root-title, :id, :file, :filena
 
 (lem:define-command roam-list-nodes () ()
   (if *organ-files*
-      (let* ((rmr (cltpt/roam:roamer-from-files *organ-files*)))
+      (let* ((rmr (current-roamer)))
         (multiple-value-bind (forest node-to-outline)
             (build-roam-outline-forest rmr)
           (let ((outline-to-node (make-hash-table :test 'eq)))
@@ -245,7 +301,7 @@ uses `cltpt:convert-simple-format' with :title, :root-title, :id, :file, :filena
 
 (lem:define-command agenda-open () ()
   (if *organ-files*
-      (let* ((rmr (cltpt/roam:roamer-from-files *organ-files*))
+      (let* ((rmr (current-roamer))
              (agenda (cltpt/agenda:from-roamer rmr))
              (range *agenda-timestamp-range*))
         (organ/agenda-mode:agenda-mode-open
