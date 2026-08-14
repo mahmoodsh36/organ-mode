@@ -224,12 +224,15 @@ usable to hand back yet."
 
 (lem:define-key lem:*global-keymap* "C-c r" *organ-keymap*)
 
+(defun roam-node-title (node)
+  (or (cltpt/roam:node-title node) (cltpt/roam:node-id node)))
+
 (defun roam-node-completion-items (nodes details)
   (let ((start (lem/prompt-window::current-prompt-start-point)))
     (loop for node in nodes
           for detail in details
           collect (lem/completion-mode:make-completion-item
-                   :label (cltpt/roam:node-title node)
+                   :label (roam-node-title node)
                    :detail detail
                    :start start))))
 
@@ -237,7 +240,7 @@ usable to hand back yet."
   (if *organ-files*
       (let* ((rmr (current-roamer))
              (titled-nodes
-               (remove-if-not #'cltpt/roam:node-title (cltpt/roam:roamer-nodes rmr)))
+               (remove-if-not #'roam-node-title (cltpt/roam:roamer-nodes rmr)))
              (type-width
                (loop for node in titled-nodes
                      when (cltpt/roam:node-text-obj node)
@@ -271,12 +274,12 @@ usable to hand back yet."
                 :test-function (lambda (x)
                                  (find x
                                        titled-nodes
-                                       :key #'cltpt/roam:node-title
+                                       :key #'roam-node-title
                                        :test #'string=))))
              ;; this is problematic because it doesnt work well with duplicates
              (choice-idx (position choice-str
                                    titled-nodes
-                                   :key #'cltpt/roam:node-title
+                                   :key #'roam-node-title
                                    :test #'string=)))
         (if (null choice-idx)
             (lem:editor-error "no node titled ~S." choice-str)
