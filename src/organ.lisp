@@ -5,7 +5,8 @@
    :*agenda-timestamp-range* :*agenda-include-done* :*agenda-first-repeat-only*
    :*organ-keymap*
    :*roam-list-nodes-format*
-   :*roam-cache-enabled* :*roam-cache-ttl* :roam-cache-invalidate))
+   :*roam-cache-enabled* :roam-cache-invalidate
+   :*roam-cache-auto-rescan* :*roam-cache-rescan-interval*))
 
 (in-package :organ)
 
@@ -29,50 +30,115 @@
   t
   "when non-nil, parsed roam nodes are kept in memory instead of rescanned on every command.")
 
-(defvar *roam-cache-ttl*
-  15
-  "seconds after which the cached roamer is considered stale and rescanned. nil means it never expires.")
-
 (defvar *roam-cache*
   nil
   "the cached `cltpt/roam:roamer', or nil.")
 
-(defvar *roam-cache-time*
+(defvar *roam-rescan-in-progress*
   nil
-  "universal time at which `*roam-cache*' was last (re)scanned.")
+  "whether a background rescan is running.")
+
+(defvar *roam-cache-auto-rescan*
+  t
+  "when non-nil, the roam files are rescanned periodically instead of only on demand.")
+
+(defvar *roam-cache-rescan-interval*
+  30
+  "seconds between periodic background rescans.")
+
+(defvar *roam-cache-rescan-timer*
+  nil
+  "the repeating timer for the periodic rescans, or nil if they are off.")
 
 (defun roam-cache-invalidate ()
   "drop the cached roamer so the next command rescans."
-  (setf *roam-cache* nil
-        *roam-cache-time* nil))
+  (setf *roam-cache* nil))
 
-(defun roam-cache-stale-p ()
-  (or (null *roam-cache*)
-      (not (equal (cltpt/roam:roamer-files *roam-cache*) *organ-files*))
-      (and *roam-cache-ttl*
-           (> (- (get-universal-time) *roam-cache-time*) *roam-cache-ttl*))))
+(defun start-roam-rescan (&optional callback)
+  "scan `*organ-files*' in a thread, then install the result as the cache.
+a fresh roamer is built rather than using `cltpt/roam:roamer-rescan' on the cached one.
+CALLBACK runs on the editor thread with the new roamer. returns nil if a scan was already running."
+  (unless *roam-rescan-in-progress*
+    (setf *roam-rescan-in-progress* t)
+    (bt2:make-thread
+     (lambda ()
+       (let ((rmr)
+             (failure))
+         (handler-case
+             (setf rmr (cltpt/roam:roamer-from-files *organ-files*))
+           (error (e)
+             (setf failure (princ-to-string e))))
+         (lem:send-event
+          (lambda ()
+            (setf *roam-rescan-in-progress* nil)
+            (if rmr
+                (progn
+                  (setf *roam-cache* rmr)
+                  (when callback
+                    (funcall callback rmr)))
+                (lem:message "roam rescan failed: ~A" failure))))))
+     :name "organ-roam-rescan")
+    t))
 
-(defun current-roamer (&key force-rescan)
-  "return a roamer for `*organ-files*', reuses cache unless it is stale or FORCE-RESCAN is T."
-  (if (not *roam-cache-enabled*)
-      (cltpt/roam:roamer-from-files *organ-files*)
+(defun stop-roam-cache-rescan ()
+  (when *roam-cache-rescan-timer*
+    (lem:stop-timer *roam-cache-rescan-timer*)
+    (setf *roam-cache-rescan-timer* nil)))
+
+(defun start-roam-cache-rescan ()
+  "(re)start the timer that rescans the roam files every `*roam-cache-rescan-interval*' seconds.
+the timer function runs on the editor thread, it starts the scan on its own thread."
+  (stop-roam-cache-rescan)
+  (setf *roam-cache-auto-rescan* t)
+  (setf *roam-cache-rescan-timer*
+        (lem:start-timer
+         (lem:make-timer
+          (lambda ()
+            (when (and *organ-files* *roam-cache-enabled*)
+              (start-roam-rescan)))
+          :name "organ-roam-cache-rescan")
+         (* 1000 *roam-cache-rescan-interval*)
+         :repeat t)))
+
+(defun ensure-roam-cache-rescan ()
+  (when (and *roam-cache-auto-rescan* (null *roam-cache-rescan-timer*))
+    (start-roam-cache-rescan)))
+
+(lem:define-command roam-cache-auto-rescan-toggle () ()
+  "turn the periodic background rescans on or off."
+  (if *roam-cache-rescan-timer*
       (progn
-        (when (or force-rescan (roam-cache-stale-p))
-          (if (and *roam-cache*
-                   (equal (cltpt/roam:roamer-files *roam-cache*) *organ-files*))
-              ;; same files, rescan without creating a new roamer
-              (cltpt/roam:roamer-rescan *roam-cache*)
-              (setf *roam-cache* (cltpt/roam:roamer-from-files *organ-files*)))
-          (setf *roam-cache-time* (get-universal-time)))
-        *roam-cache*)))
+        (stop-roam-cache-rescan)
+        (setf *roam-cache-auto-rescan* nil)
+        (lem:message "roam cache auto rescan off."))
+      (progn
+        (start-roam-cache-rescan)
+        (lem:message "rescanning the roam files every ~A seconds."
+                     *roam-cache-rescan-interval*))))
 
-(lem:define-command roam-refresh () ()
-  "rescan the roam files, discarding the cache."
+(defun current-roamer ()
+  "return a roamer for `*organ-files*'.
+the cache is kept up to date by the rescan timer, so this only blocks when there is nothing
+usable to hand back yet."
+  (ensure-roam-cache-rescan)
+  (if (and *roam-cache-enabled*
+           *roam-cache*
+           (equal (cltpt/roam:roamer-files *roam-cache*) *organ-files*))
+      *roam-cache*
+      (let ((rmr (cltpt/roam:roamer-from-files *organ-files*)))
+        (when *roam-cache-enabled*
+          (setf *roam-cache* rmr))
+        rmr)))
+
+(lem:define-command roam-rescan () ()
+  "rescan the roam files in the background, replacing the cache when done."
   (if *organ-files*
-      (progn
-        (current-roamer :force-rescan t)
-        (lem:message "rescanned ~A roam nodes."
-                     (length (cltpt/roam:roamer-nodes *roam-cache*))))
+      (if (start-roam-rescan
+           (lambda (rmr)
+             (lem:message "rescanned ~A roam nodes."
+                          (length (cltpt/roam:roamer-nodes rmr)))))
+          (lem:message "rescanning roam files...")
+          (lem:message "a roam rescan is already running."))
       (lem:message "you must customize *organ-files* first.")))
 
 ;; custom infix type for prompting a timestamp range via two date inputs.
@@ -146,7 +212,8 @@
      :description "roam actions"
      (:key "r" :suffix 'roam-find :description "browse nodes")
      (:key "l" :suffix 'roam-list-nodes :description "list nodes")
-     (:key "g" :suffix 'roam-refresh :description "rescan nodes"))
+     (:key "g" :suffix 'roam-rescan :description "rescan nodes")
+     (:key "t" :suffix 'roam-cache-auto-rescan-toggle :description "toggle periodic rescan"))
     (:keymap
      :description "roam options"
      (:key "c"
