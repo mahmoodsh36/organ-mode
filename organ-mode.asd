@@ -14,9 +14,12 @@
                 :depends-on ("utils")
                 :components ((:file "calendar-mode")
                              (:file "popup-calendar")))
+               (:module "roam"
+                :pathname "src/"
+                :components ((:file "roam")))
                (:module "organ-mode"
                 :pathname "src/organ-mode/"
-                :depends-on ("utils" "calendar")
+                :depends-on ("utils" "calendar" "roam")
                 :components ((:file "organ-mode")
                              (:file "utils")
                              (:file "highlighting")
@@ -35,7 +38,7 @@
                              (:file "agenda-mode")))
                (:module "organ"
                 :pathname "src/"
-                :depends-on ("organ-mode" "calendar" "agenda")
+                :depends-on ("organ-mode" "calendar" "agenda" "roam")
                 :components ((:file "organ")))
                (:module "capture"
                 :pathname "src/"

@@ -289,7 +289,9 @@ when nil, it will only reformat the table and the cursor will remain in the last
   "open the link at point."
   (let* ((obj (cltpt/base:child-at-pos (current-tree)
                                        (organ/utils:current-pos)))
-         (resolved (cltpt/base:text-link-resolve obj))
+         (resolved (let ((cltpt/roam:*roam-parse-data*
+                           (list :roamer (organ/roam:current-roamer))))
+                     (cltpt/base:text-link-resolve obj)))
          (link (cltpt/base:text-link-link obj))
          (dest (cltpt/base:link-dest link))
          (source-buffer (lem:current-buffer))
