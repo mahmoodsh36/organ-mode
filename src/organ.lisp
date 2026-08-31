@@ -176,15 +176,20 @@
         (lem:editor-error "no node titled ~S." choice-str)
         (elt titled-nodes choice-idx))))
 
+(defun open-roam-node (node)
+  "switch to NODE's file and move to its position."
+  (when node
+    (let* ((dest-file (cltpt/roam:node-file node))
+           (text-obj (cltpt/roam:node-text-obj node))
+           (buffer (when dest-file (lem:find-file-buffer dest-file))))
+      (when buffer
+        (lem:switch-to-buffer buffer)
+        (when (and text-obj (not (typep text-obj 'cltpt/base:document)))
+          (lem:move-to-position (lem:current-point)
+                                (1+ (cltpt/base:text-object-begin-in-root text-obj))))))))
+
 (lem:define-command roam-find () ()
-  (let* ((choice (prompt-for-roam-node "roam-find (node) "))
-         (dest-file (cltpt/roam:node-file choice))
-         (text-obj (cltpt/roam:node-text-obj choice))
-         (buffer (lem:find-file-buffer dest-file)))
-    (lem:switch-to-buffer buffer)
-    (when text-obj
-      (lem:move-to-position (lem:current-point)
-                            (1+ (cltpt/base:text-object-begin-in-root text-obj))))))
+  (open-roam-node (prompt-for-roam-node "roam-find (node) ")))
 
 (lem:define-command roam-insert-link () ()
   "prompt for a roam node and insert a link to it at point."
@@ -262,16 +267,7 @@ uses `cltpt:convert-simple-format' with :title, :root-title, :id, :file, :filena
              forest
              :action-function
              (lambda (outline-node)
-               (let* ((roam-node (gethash outline-node outline-to-node))
-                      (dest-file (when roam-node (cltpt/roam:node-file roam-node)))
-                      (text-obj (when roam-node (cltpt/roam:node-text-obj roam-node))))
-                 (when dest-file
-                   (let ((buffer (lem:find-file-buffer dest-file)))
-                     (lem:switch-to-buffer buffer)
-                     (when text-obj
-                       (lem:move-to-position
-                        (lem:current-point)
-                        (1+ (cltpt/base:text-object-begin-in-root text-obj))))))))))))
+               (open-roam-node (gethash outline-node outline-to-node)))))))
       (lem:message "you must customize *organ-files* first.")))
 
 (lem:define-command agenda-open () ()
