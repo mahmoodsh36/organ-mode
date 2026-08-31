@@ -151,22 +151,22 @@
                                       (cltpt/roam:node-text-obj node)))))
                                  (file-namestring (cltpt/roam:node-file node)))))
          (choice-str
-          (lem:prompt-for-string
-           prompt
-           ;; the items are rebuilt on each keystroke: they carry points into the prompt,
-           ;; and its end moves as it is typed into. we have to do it this way because
-           ;; currently lem is dumb about entries with spaces in them.
-           :completion-function (lambda (x)
-                                  (lem:completion-strings
-                                   x
-                                   (roam-node-completion-items titled-nodes details)
-                                   :key #'lem/completion-mode:completion-item-label))
-           ;; refuse text that isnt a node title
-           :test-function (lambda (x)
-                            (find x
-                                  titled-nodes
-                                  :key #'roam-node-title
-                                  :test #'string=))))
+           (lem:prompt-for-string
+            prompt
+            ;; the items are rebuilt on each keystroke: they carry points into the prompt,
+            ;; and its end moves as it is typed into. we have to do it this way because
+            ;; currently lem is dumb about entries with spaces in them.
+            :completion-function (lambda (x)
+                                   (lem:completion-strings
+                                    x
+                                    (roam-node-completion-items titled-nodes details)
+                                    :key #'lem/completion-mode:completion-item-label))
+            ;; refuse text that isnt a node title
+            :test-function (lambda (x)
+                             (find x
+                                   titled-nodes
+                                   :key #'roam-node-title
+                                   :test #'string=))))
          ;; this is problematic because it doesnt work well with duplicates
          (choice-idx (position choice-str
                                titled-nodes
