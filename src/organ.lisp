@@ -116,6 +116,11 @@
 (defun roam-node-title (node)
   (or (cltpt/roam:node-title node) (cltpt/roam:node-id node)))
 
+(defun roam-node-titles (node)
+  (or (cltpt/roam:node-titles node)
+      (when (cltpt/roam:node-id node)
+        (list (cltpt/roam:node-id node)))))
+
 (defun roam-node-completion-items (nodes details)
   (let ((start (lem/prompt-window::current-prompt-start-point)))
     (loop for node in nodes
@@ -130,17 +135,21 @@
   (unless *organ-files*
     (lem:editor-error "you must customize *organ-files* first."))
   (let* ((rmr (current-roamer))
-         (titled-nodes
-           (remove-if-not #'roam-node-title (cltpt/roam:roamer-nodes rmr)))
+         (pairs
+           (loop for node in (cltpt/roam:roamer-nodes rmr)
+                 for titles = (roam-node-titles node)
+                 when titles
+                   append (loop for title in titles
+                                collect (cons node title))))
          (type-width
-           (loop for node in titled-nodes
+           (loop for (node . title) in pairs
                  when (cltpt/roam:node-text-obj node)
                    maximize (length (symbol-name
                                      (class-name
                                       (class-of
                                        (cltpt/roam:node-text-obj node)))))))
          (details
-           (loop for node in titled-nodes
+           (loop for (node . title) in pairs
                  collect (format nil
                                  "~v@<~@[~A~]~>  ~A"
                                  type-width
@@ -157,24 +166,23 @@
             ;; and its end moves as it is typed into. we have to do it this way because
             ;; currently lem is dumb about entries with spaces in them.
             :completion-function (lambda (x)
-                                   (lem:completion-strings
-                                    x
-                                    (roam-node-completion-items titled-nodes details)
-                                    :key #'lem/completion-mode:completion-item-label))
+                                   (let ((start (lem/prompt-window::current-prompt-start-point)))
+                                     (lem:completion-strings
+                                      x
+                                      (loop for (node . title) in pairs
+                                            for detail in details
+                                            collect (lem/completion-mode:make-completion-item
+                                                     :label title
+                                                     :detail detail
+                                                     :start start))
+                                      :key #'lem/completion-mode:completion-item-label)))
             ;; refuse text that isnt a node title
             :test-function (lambda (x)
-                             (find x
-                                   titled-nodes
-                                   :key #'roam-node-title
-                                   :test #'string=))))
-         ;; this is problematic because it doesnt work well with duplicates
-         (choice-idx (position choice-str
-                               titled-nodes
-                               :key #'roam-node-title
-                               :test #'string=)))
-    (if (null choice-idx)
+                             (find x pairs :key #'cdr :test #'string=))))
+         (choice-pair (find choice-str pairs :key #'cdr :test #'string=)))
+    (if (null choice-pair)
         (lem:editor-error "no node titled ~S." choice-str)
-        (elt titled-nodes choice-idx))))
+        (car choice-pair))))
 
 (defun open-roam-node (node)
   "switch to NODE's file and move to its position."
