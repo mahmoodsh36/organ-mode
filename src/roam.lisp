@@ -4,7 +4,7 @@
    :*organ-files*
    :*roam-cache-enabled* :roam-cache-invalidate
    :*roam-cache-auto-rescan* :*roam-cache-rescan-interval*
-   :roam-rescan :roam-cache-auto-rescan-toggle
+   :*roam-titles-include-id* :roam-rescan :roam-cache-auto-rescan-toggle
    :current-roamer))
 
 (in-package :organ/roam)
@@ -36,6 +36,10 @@
 (defvar *roam-cache-rescan-timer*
   nil
   "the repeating timer for the periodic rescans, or nil if they are off.")
+
+(defvar *roam-titles-include-id*
+  nil
+  "when non-nil, include a node's id as an extra searchable title in `roam-find'.")
 
 (defun roam-cache-invalidate ()
   "drop the cached roamer so the next command rescans."

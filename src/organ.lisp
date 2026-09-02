@@ -10,7 +10,7 @@
    :*organ-files*
    :*agenda-timestamp-range* :*agenda-include-done* :*agenda-first-repeat-only*
    :*organ-keymap*
-   :*roam-list-nodes-format*
+   :*roam-list-nodes-format* :*roam-titles-include-id*
    :*roam-cache-enabled* :roam-cache-invalidate
    :*roam-cache-auto-rescan* :*roam-cache-rescan-interval*
    :current-roamer))
@@ -109,6 +109,10 @@
       :type 'toggle
       :description "cache nodes"
       :variable '*roam-cache-enabled*)
+     (:key "I"
+      :type 'toggle
+      :description "id as title"
+      :variable '*roam-titles-include-id*)
      (:key "f" :suffix 'test :description "roam files (not yet implemented)" :active-p nil)))))
 
 (lem:define-key lem:*global-keymap* "C-c r" *organ-keymap*)
@@ -117,9 +121,14 @@
   (or (cltpt/roam:node-title node) (cltpt/roam:node-id node)))
 
 (defun roam-node-titles (node)
-  (or (cltpt/roam:node-titles node)
-      (when (cltpt/roam:node-id node)
-        (list (cltpt/roam:node-id node)))))
+  (let ((titles (cltpt/roam:node-titles node))
+        (id (cltpt/roam:node-id node)))
+    (if *roam-titles-include-id*
+        (cond ((and titles id)
+               (append titles (list id)))
+              (titles titles)
+              (id (list id)))
+        titles)))
 
 (defun roam-node-completion-items (nodes details)
   (let ((start (lem/prompt-window::current-prompt-start-point)))
