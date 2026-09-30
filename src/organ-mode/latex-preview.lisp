@@ -419,11 +419,13 @@ replaced on every keystroke."
 
 (defun ensure-preview-hook (buffer)
   "make sure BUFFER reports its changes to the preview machinery."
-  (unless (lem:buffer-value buffer 'latex-preview-hook)
-    (setf (lem:buffer-value buffer 'latex-preview-hook) t)
+  (unless (member 'preview-after-change
+                  (lem:variable-value 'lem:after-change-functions :buffer buffer)
+                  :key #'car)
     (lem:add-hook (lem:variable-value 'lem:after-change-functions :buffer buffer)
                   'preview-after-change
-                  -1)))
+                  -1))
+  (setf (lem:buffer-value buffer 'latex-preview-hook) t))
 
 (defun release-preview-hook (buffer)
   (setf (lem:buffer-value buffer 'latex-preview-hook) nil)
@@ -467,9 +469,13 @@ replaced on every keystroke."
 
 (defun latex-preview-init ()
   "turn previews on in a new organ-mode buffer when `*organ-latex-preview-auto*' says to."
-  (when (and *organ-latex-preview-auto*
-             (preview-images-drawable-p))
-    (organ-latex-preview-mode t)))
+  (let ((buffer (lem:current-buffer)))
+    (cond (*organ-latex-preview-auto*
+           (when (preview-images-drawable-p)
+             (organ-latex-preview-mode t)))
+          ;; re-running the major mode wipes buffer-local hooks while an enabled minor mode survives.
+          ((lem:mode-active-p buffer 'organ-latex-preview-mode)
+           (ensure-preview-hook buffer)))))
 
 ;; runs after `organ-mode-init-all', which is what parses the buffer we are about to preview.
 (lem:add-hook *organ-mode-hook* 'latex-preview-init -1)
