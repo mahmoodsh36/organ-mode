@@ -352,12 +352,19 @@
     ("json" . "JSON")
     ("java" . "Java")))
 
+(defun organ-find-mode (name)
+  "find the major mode named NAME. this is `lem:find-mode' without the sort because its faster."
+  (find name
+        (remove-if-not #'lem-core::major-mode-p lem-core::*mode-objects*)
+        :key #'lem:mode-name
+        :test #'string-equal))
+
 (defun find-mode-for-language (lang-name)
   "find a lem major mode for a src block language name."
   (when lang-name
     (let* ((mapped (cdr (assoc lang-name *language-mode-alist* :test #'string-equal)))
            (mode-name (or mapped lang-name)))
-      (lem:find-mode mode-name))))
+      (organ-find-mode mode-name))))
 
 (defun apply-src-block-syntax-highlighting (obj buf)
   "apply language-specific syntax highlighting to the contents of a src block."
