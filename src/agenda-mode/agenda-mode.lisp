@@ -1,6 +1,6 @@
 (defpackage :organ/agenda-mode
   (:use :cl :lem :organ/agenda-mode/utils)
-  (:export :agenda-mode-open :interactive-render-node :agenda-mode :current-header))
+  (:export :agenda-mode-open :agenda-reload :interactive-render-node :agenda-mode :current-header))
 
 (in-package :organ/agenda-mode)
 
@@ -54,6 +54,7 @@
   :display-style :row
   :description "organ-mode keymap"
   (:key "Return" :suffix 'agenda-mode-follow)
+  (:key "r" :suffix 'agenda-reload)
   (:key "C-c C-s" :suffix 'agenda-schedule)
   (:key "C-c C-d" :suffix 'agenda-deadline))
 
@@ -81,6 +82,11 @@
   (let ((buffer (lem:make-buffer "*agenda*")))
     (lem:change-buffer-mode buffer 'agenda-mode)
     (setf (lem:buffer-value buffer 'agenda) agenda)
+    ;; remember how this view was built so `agenda-reload' can rebuild it.
+    (setf (lem:buffer-value buffer 'agenda-begin-ts) begin-ts)
+    (setf (lem:buffer-value buffer 'agenda-end-ts) end-ts)
+    (setf (lem:buffer-value buffer 'agenda-include-done) include-done)
+    (setf (lem:buffer-value buffer 'agenda-first-repeat-only) first-repeat-only)
     (let ((forest (cltpt/agenda:build-agenda-forest
                    agenda
                    :begin-ts begin-ts
@@ -98,6 +104,44 @@
             ;; advance into the content area where :outline-node is set
             (lem:next-single-property-change point :outline-node)))))
     buffer))
+
+(defun agenda-rebuild-buffer (buffer)
+  "rebuild the agenda forest for BUFFER and re-render it.
+returns the new forest. falls back to the stored agenda when `*organ-files*' is nil."
+  (let* ((begin-ts (lem:buffer-value buffer 'agenda-begin-ts))
+         (end-ts (lem:buffer-value buffer 'agenda-end-ts))
+         (include-done (lem:buffer-value buffer 'agenda-include-done))
+         (first-repeat-only (lem:buffer-value buffer 'agenda-first-repeat-only))
+         (agenda (if organ/roam:*organ-files*
+                     (cltpt/agenda:from-roamer (organ/roam:current-roamer))
+                     (lem:buffer-value buffer 'agenda))))
+    (setf (lem:buffer-value buffer 'agenda) agenda)
+    (let ((forest (cltpt/agenda:build-agenda-forest
+                   agenda
+                   :begin-ts begin-ts
+                   :end-ts end-ts
+                   :include-done include-done
+                   :first-repeat-only first-repeat-only)))
+      (organ/outline-mode:set-outline-forest buffer forest)
+      (organ/outline-mode:render-outline buffer forest)
+      forest)))
+
+(defun agenda-restore-line (buffer line)
+  (let ((point (lem:buffer-point buffer)))
+    (lem:move-to-line point (min line (lem:buffer-nlines buffer)))
+    ;; move into the node's content
+    (lem:with-point ((line-end point))
+      (lem:line-end line-end)
+      (lem:next-single-property-change point :outline-node line-end))))
+
+(lem:define-command agenda-reload () ()
+  "rebuild the current agenda view, picking up file edits seen by the latest roam rescan."
+  (let ((buffer (lem:current-buffer)))
+    (unless (lem:mode-active-p buffer 'agenda-mode)
+      (lem:editor-error "not in an agenda buffer."))
+    (let ((line (lem:line-number-at-point (lem:current-point))))
+      (agenda-rebuild-buffer buffer)
+      (agenda-restore-line buffer line))))
 
 (defmethod organ/outline-mode:interactive-render-node ((node cltpt/agenda:task-record)
                                                        buffer
