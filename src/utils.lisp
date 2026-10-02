@@ -7,7 +7,7 @@
    :format-timestamp :format-inactive-timestamp-with-time
    :replace-submatch-text :replace-submatch-text*
    :find-parent-of-type :find-node-at-pos :find-node-at-point
-   :insert-header-log-entry
+   :insert-header-log-entry :set-header-property
    :append-header-action :find-header-action :remove-header-action
    :*open-file-command* :open-file-externally))
 
@@ -215,17 +215,52 @@ crossing onto the previous line's newline."
            (1+ end-pos)
            ""))))))
 
+(defun header-metadata-end (header)
+  "return the absolute position where HEADER's title and action lines end."
+  (let ((last-action (last-header-action header)))
+    (if last-action
+        (cltpt/combinator:match-end-absolute last-action)
+        (header-after-title-pos header))))
+
+(defun insert-line-after (buffer pos text)
+  "insert TEXT as a new line after the line containing absolute position POS."
+  (let ((point (lem:copy-point (lem:buffer-start-point buffer) :temporary)))
+    (lem:move-to-position point (1+ pos))
+    (lem:line-end point)
+    (lem:insert-string point (format nil "~%~A" text))))
+
+(defun set-header-property (buffer header key value)
+  "set KEY to VALUE in HEADER's property drawer, creating the drawer if needed."
+  (let ((drawer (cltpt/org-mode:org-header-prop-drawer header)))
+    (if drawer
+        (let* ((match (cltpt/base:text-object-match drawer))
+               (entry (find-if
+                       (lambda (e)
+                         (string-equal
+                          (cltpt/base:text-object-match-text
+                           drawer
+                           (cltpt/combinator:find-submatch e 'cltpt/org-mode::drawer-key))
+                          key))
+                       (cltpt/combinator:find-submatch-all match 'cltpt/org-mode::drawer-entry))))
+          (if entry
+              (replace-submatch-text*
+               buffer
+               (cltpt/combinator:find-submatch entry 'cltpt/org-mode::drawer-value)
+               value)
+              (insert-line-after
+               buffer
+               (cltpt/combinator:match-end-absolute
+                (cltpt/combinator:find-submatch match 'cltpt/org-mode::drawer-open-tag))
+               (format nil ":~A: ~A" key value))))
+        (insert-line-after buffer
+                           (header-metadata-end header)
+                           (format nil ":PROPERTIES:~%:~A: ~A~%:END:" key value)))))
+
 (defun insert-header-log-entry (buffer header log-text)
-  "insert LOG-TEXT as a new log line under HEADER's metadata in BUFFER."
-  (let* ((last-action (last-header-action header))
-         (insert-pos
-           (if last-action
-               (cltpt/combinator:match-end-absolute last-action)
-               (header-after-title-pos header)))
-         (line-end-point
-           (lem:copy-point
-            (lem:buffer-start-point buffer)
-            :temporary)))
-    (lem:move-to-position line-end-point (1+ insert-pos))
-    (lem:line-end line-end-point)
-    (lem:insert-string line-end-point (format nil "~%~A" log-text))))
+  "insert LOG-TEXT as a new log line under HEADER's metadata and property drawer in BUFFER."
+  (let ((drawer (cltpt/org-mode:org-header-prop-drawer header)))
+    (insert-line-after buffer
+                       (if drawer
+                           (1- (cltpt/base:text-object-end-in-root drawer))
+                           (header-metadata-end header))
+                       log-text)))

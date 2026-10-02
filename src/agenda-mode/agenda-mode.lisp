@@ -283,18 +283,27 @@ returns the new forest. falls back to the stored agenda when `*organ-files*' is 
                                  (pad-to (format nil "\"~A\"" new-state-name-str) 13)
                                  (pad-to (format nil "\"~A\"" old-state-name) 13)
                                  (organ/utils:format-inactive-timestamp-with-time))))
-                      ;; properly place the CLOSED timestamp (on the action line)
-                      (cond
-                        ((and is-terminal (not was-terminal))
-                         (insert-closed-timestamp (lem:current-buffer) header))
-                        ((and was-terminal (not is-terminal))
-                         (remove-closed-timestamp (lem:current-buffer) header)))
-                      ;; TODO keyword replacement
-                      (organ/utils:replace-submatch-text
-                       (lem:current-buffer)
-                       header
-                       'cltpt/org-mode::todo-keyword
-                       new-state-name-str))
+                      (if (and is-terminal (cltpt/agenda:task-repeating-p task))
+                          ;; finishing a repeating task only hides occurrences up to now (like
+                          ;; org-mode, LAST_REPEAT is the current time), the keyword stays as is.
+                          (organ/utils:set-header-property
+                           (lem:current-buffer)
+                           header
+                           "LAST_REPEAT"
+                           (organ/utils:format-inactive-timestamp-with-time))
+                          (progn
+                            ;; properly place the CLOSED timestamp (on the action line)
+                            (cond
+                              ((and is-terminal (not was-terminal))
+                               (insert-closed-timestamp (lem:current-buffer) header))
+                              ((and was-terminal (not is-terminal))
+                               (remove-closed-timestamp (lem:current-buffer) header)))
+                            ;; TODO keyword replacement
+                            (organ/utils:replace-submatch-text
+                             (lem:current-buffer)
+                             header
+                             'cltpt/org-mode::todo-keyword
+                             new-state-name-str))))
                     ;; no existing TODO keyword, insert before the title
                     (let* ((match (cltpt/base:text-object-match header))
                            (title-submatch (cltpt/combinator:find-submatch
