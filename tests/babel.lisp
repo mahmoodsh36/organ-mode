@@ -53,7 +53,7 @@ return [1, 2]
 #+end_src
 
 #+RESULTS:
-[1, 2]
+: [1, 2]
 after"))
         (testing "table results"
           (check-buffer
@@ -90,8 +90,25 @@ print('hi')
 #+end_src
 
 #+RESULTS:
-hi
-"))
+: hi
+: "))
+        (testing "rerunning replaces existing results"
+          (check-buffer
+           "rerun"
+           (run-babel "#+begin_src python :results output
+print('new')
+#+end_src
+
+#+RESULTS:
+: old
+: ")
+           "#+begin_src python :results output
+print('new')
+#+end_src
+
+#+RESULTS:
+: new
+: "))
         (testing "stderr goes to the errors buffer and no results are inserted"
           (let ((text "#+begin_src python
 print(undefined)
