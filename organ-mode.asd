@@ -28,6 +28,7 @@
                              (:file "move")
                              (:file "fold")
                              (:file "latex-preview")
+                             (:file "babel")
                              (:file "dwim")
                              (:file "vi")
                              ))

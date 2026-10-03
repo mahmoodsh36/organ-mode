@@ -10,4 +10,5 @@
                (:file "move")
                (:file "org-list")
                (:file "org-table")
-               (:file "nav")))
+               (:file "nav")
+               (:file "babel")))

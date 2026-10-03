@@ -18,7 +18,8 @@
    :*organ-latex-preview-auto*
    :*organ-latex-preview-foreground*
    :*organ-latex-preview-types*
-   :*organ-latex-preview-debounce*))
+   :*organ-latex-preview-debounce*
+   :organ-babel-execute-src-block))
 
 (in-package :organ/organ-mode)
 
@@ -86,6 +87,7 @@ when nil, it will only reformat the table and the cursor will remain in the last
   (:key "C-c C-d" :suffix 'organ-deadline)
   (:key "C-c C-v C-n" :suffix 'organ-next-src-block)
   (:key "C-c C-v C-p" :suffix 'organ-prev-src-block)
+  (:key "C-c C-v C-e" :suffix 'organ-babel-execute-src-block)
   (:key "C-c -" :suffix 'organ-cycle-list-bullet)
   (:key "C-c C-e" :suffix *organ-mode-export-keymap* :description "export dispatch")
   (:key "C-c C-o" :suffix 'organ-open-at-point)

@@ -56,6 +56,7 @@
                (or (pos-on-first-line-of-obj-p blk pos)
                    (pos-on-last-line-of-obj-p blk pos)))
       blk)))
+
 (defun show-text-buffer (name text)
   "show TEXT in the buffer called NAME, replacing whatever was in it, and return the buffer."
   (let ((buffer (lem:make-buffer name)))

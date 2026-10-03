@@ -234,13 +234,15 @@
   'organ-dwim-return)
 
 (defmethod prefix-active-p ((p (eql *ctrl-c-ctrl-c-prefix*)))
-  (current-text-obj-ignore-newline 'cltpt/org-mode:org-list))
+  (or (current-text-obj-ignore-newline 'cltpt/org-mode:org-list)
+      (src-block-at-point)))
 
 (lem:define-command organ-ctrl-c-ctrl-c () ()
   "context-sensitive command bound to C-c C-c."
   (let ((list-obj (current-text-obj-ignore-newline 'cltpt/org-mode:org-list)))
     (cond
       (list-obj (org-list-toggle-checkbox (list-obj-for-checkbox-toggle list-obj)))
+      ((src-block-at-point) (organ-babel-execute-src-block))
       (t (lem:editor-error "nothing to do here.")))))
 
 (defmethod prefix-suffix ((p (eql *ctrl-c-ctrl-c-prefix*)))

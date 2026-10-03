@@ -5,7 +5,7 @@
    :replace-text-between-positions
    :*weekday-names*
    :format-timestamp :format-inactive-timestamp-with-time
-   :replace-submatch-text :replace-submatch-text*
+   :replace-submatch-text :replace-submatch-text* :apply-change
    :find-parent-of-type :find-node-at-pos :find-node-at-point
    :insert-header-log-entry :set-header-property
    :append-header-action :find-header-action :remove-header-action
@@ -86,6 +86,14 @@ crossing onto the previous line's newline."
    (1+ (cltpt/combinator:match-begin-absolute submatch))
    (1+ (cltpt/combinator:match-end-absolute submatch))
    new-text))
+
+(defun apply-change (buffer change)
+  "apply the cltpt CHANGE to BUFFER. only string operators are supported."
+  (replace-text-between-positions
+   buffer
+   (1+ (cltpt/buffer:change-begin change))
+   (1+ (cltpt/buffer:change-end change))
+   (cltpt/buffer:change-operator change)))
 
 (defun replace-submatch-text (buffer text-obj submatch-id new-text)
   (let* ((match (cltpt/base:text-object-match text-obj))
