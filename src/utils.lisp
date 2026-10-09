@@ -7,6 +7,7 @@
    :format-timestamp :format-inactive-timestamp-with-time
    :replace-submatch-text :replace-submatch-text* :apply-change
    :find-parent-of-type :find-node-at-pos :find-node-at-point
+   :find-node-at-pos-ignore-newline
    :insert-header-log-entry :set-header-property
    :append-header-action :find-header-action :remove-header-action
    :*open-file-command* :open-file-externally))
@@ -146,6 +147,17 @@ crossing onto the previous line's newline."
 (defun find-node-at-point (tree point type)
   "find the node of TYPE at the given lem POINT in TREE."
   (find-node-at-pos tree (point-to-char-offset point) type))
+
+;; this is a special case where we also care about pos-1
+(defun find-node-at-pos-ignore-newline (tree pos type)
+  "like `find-node-at-pos', but fall back to POS-1 when POS finds nothing.
+handles the boundary case where the cursor sits just past an object's end.
+for example this function would detect an org-list when the cursor is over the newline at the end of
+last list item because the org-list region wouldnt include the trailing newline. find-node-at-pos
+would fail to detect the list in that case."
+  (or (find-node-at-pos tree pos type)
+      (when (> pos 0)
+        (find-node-at-pos tree (1- pos) type))))
 
 (defun last-header-action (header)
   "return the last action match (active or inactive) in HEADER, or nil."

@@ -223,7 +223,7 @@ returns the new forest. falls back to the stored agenda when `*organ-files*' is 
               (lem:move-to-position (lem:current-point)
                                     (1+ (cltpt/base:text-object-begin-in-root text-obj))))))
         (setf header
-              (organ/utils:find-node-at-pos
+              (organ/utils:find-node-at-pos-ignore-newline
                (organ/organ-mode:current-tree)
                (organ/utils:current-pos)
                'cltpt/org-mode:org-header)))

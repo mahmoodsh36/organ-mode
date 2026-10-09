@@ -250,7 +250,7 @@ when nil, it will only reformat the table and the cursor will remain in the last
 
 (lem:define-command organ-schedule () ()
   "prompt for a date and insert/update a SCHEDULED timestamp under the current org-header."
-  (let ((header (organ/utils:find-node-at-pos
+  (let ((header (organ/utils:find-node-at-pos-ignore-newline
                  (current-tree)
                  (organ/utils:current-pos)
                  'cltpt/org-mode:org-header))
@@ -266,7 +266,7 @@ when nil, it will only reformat the table and the cursor will remain in the last
 
 (lem:define-command organ-deadline () ()
   "prompt for a date and insert/update a DEADLINE timestamp under the current org-header."
-  (let ((header (organ/utils:find-node-at-pos
+  (let ((header (organ/utils:find-node-at-pos-ignore-newline
                  (current-tree)
                  (organ/utils:current-pos)
                  'cltpt/org-mode:org-header))

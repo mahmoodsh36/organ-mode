@@ -1,22 +1,12 @@
 (in-package :organ/organ-mode)
 
-;; this is a special case where we also care about current_pos-1
 (defun current-text-obj-ignore-newline (type)
-  (let ((pos (organ/utils:current-pos))
-        (tree (current-tree)))
-    ;; find enclosing element: try text-obj parent-walk first, fall back to pos-1 for
-    ;; the boundary case (end of last list item where the org-list region doesnt include
-    ;; the trailing newline).
+  (let ((tree (current-tree)))
     (when tree
-      (or (organ/utils:find-node-at-pos
-           tree
-           pos
-           type)
-          (when (> pos 0)
-            (organ/utils:find-node-at-pos
-             tree
-             (1- pos)
-             type))))))
+      (organ/utils:find-node-at-pos-ignore-newline
+       tree
+       (organ/utils:current-pos)
+       type))))
 
 (defun pos-on-first-line-of-obj-p (obj pos)
   "return T if POS is on the first line of OBJ."
