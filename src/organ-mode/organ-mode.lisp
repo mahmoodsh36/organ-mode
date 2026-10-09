@@ -85,6 +85,7 @@ when nil, it will only reformat the table and the cursor will remain in the last
   (:key "C-c C-x C-p" :suffix 'organ-prev-link)
   (:key "C-c C-s" :suffix 'organ-schedule)
   (:key "C-c C-d" :suffix 'organ-deadline)
+  (:key "C-c ." :suffix 'organ-insert-timestamp)
   (:key "C-c C-v C-n" :suffix 'organ-next-src-block)
   (:key "C-c C-v C-p" :suffix 'organ-prev-src-block)
   (:key "C-c C-v C-e" :suffix 'organ-babel-execute-src-block)
