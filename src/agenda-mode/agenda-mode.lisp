@@ -52,7 +52,7 @@
 (lem/transient:define-transient *agenda-mode-keymap*
   :base organ/outline-mode:*outline-mode-keymap*
   :display-style :row
-  :description "organ-mode keymap"
+  :description "agenda-mode keymap"
   (:key "Return" :suffix 'agenda-mode-follow)
   (:key "r" :suffix 'agenda-reload)
   (:key "C-c C-s" :suffix 'agenda-schedule)
