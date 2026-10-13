@@ -143,13 +143,10 @@ returns the new forest. falls back to the stored agenda when `*organ-files*' is 
       (agenda-rebuild-buffer buffer)
       (agenda-restore-line buffer line))))
 
-(defmethod organ/outline-mode:interactive-render-node ((node cltpt/agenda:task-record)
-                                                       buffer
-                                                       point
-                                                       depth)
-  "render a task record in org-agenda style."
+(defun render-task-record (node point depth &optional overdue-days)
+  "render task-record NODE, OVERDUE-DAYS replaces the keyword for an overdue prefix."
   (let* ((indent (make-string (* depth 2) :initial-element #\space)))
-    ;; this should be in-sync with `(defmethod cltpt/tree/outline:outline-text ((rec task-record))'
+    ;; this should be in-sync with `cltpt/agenda::record-outline-text'
     (labels ((format-ts (ts)
                (local-time:format-timestring
                 nil
@@ -163,13 +160,20 @@ returns the new forest. falls back to the stored agenda when `*organ-files*' is 
                            (format-ts (cltpt/agenda:time-range-end time)))
                    (format-ts time))))
       (let* ((task1 (cltpt/agenda:task-record-task node))
-             (time (cltpt/agenda:task-record-time node))
+             (time (unless (or overdue-days (cltpt/agenda:task-record-date-only-p node))
+                     (cltpt/agenda:task-record-time node)))
              (state-name (princ-to-string
                           (cltpt/agenda:state-name (cltpt/agenda:task-state task1))))
              (title (cltpt/agenda:task-title task1))
              (prefix-keyword (cond
-                               ((cltpt/agenda:deadline node) "Deadline")
-                               ((cltpt/agenda:start-task node) "Scheduled"))))
+                               ((cltpt/agenda:deadline node)
+                                (if overdue-days
+                                    (format nil "~2d d. ago:" overdue-days)
+                                    "Deadline:"))
+                               ((cltpt/agenda:start-task node)
+                                (if overdue-days
+                                    (format nil "Sched.~2dx:" overdue-days)
+                                    "Scheduled:")))))
         (lem:insert-string point indent)
         ;; add the tree connector symbol based on whether node has children
         (if (cltpt/tree/outline:could-expand node)
@@ -187,7 +191,8 @@ returns the new forest. falls back to the stored agenda when `*organ-files*' is 
             (lem:insert-string point " ----- "))
           (when prefix-keyword
             (lem:insert-string point prefix-keyword :attribute 'agenda-keyword-attribute)
-            (lem:insert-string point ":   "))
+            (lem:insert-string point (make-string (max 1 (- 13 (length prefix-keyword)))
+                                                  :initial-element #\space)))
           ;; state name without parentheses
           (lem:insert-string point state-name :attribute 'agenda-state-attribute)
           (lem:insert-string point " ")
@@ -211,6 +216,21 @@ returns the new forest. falls back to the stored agenda when `*organ-files*' is 
                (declare (ignore window))
                (organ/outline-mode::outline-expand-collapse-at-point clicked-point)))
             (lem:put-text-property content-start-pos node-end-pos :outline-node node)))))))
+
+(defmethod organ/outline-mode:interactive-render-node ((node cltpt/agenda:task-record)
+                                                       buffer
+                                                       point
+                                                       depth)
+  (render-task-record node point depth))
+
+(defmethod organ/outline-mode:interactive-render-node ((node cltpt/agenda:agenda-overdue-node)
+                                                       buffer
+                                                       point
+                                                       depth)
+  (render-task-record (cltpt/agenda:agenda-overdue-node-record node)
+                      point
+                      depth
+                      (cltpt/agenda:agenda-overdue-node-days node)))
 
 (defun current-header ()
   (let ((header))

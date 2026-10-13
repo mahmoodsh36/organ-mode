@@ -1,6 +1,7 @@
 (defpackage :organ/agenda-mode/utils
   (:use :cl :lem)
   (:export
+   :node-record
    :task-record-location
    :node-timestamp
    :find-line-for-current-time
@@ -11,20 +12,28 @@
 
 (in-package :organ/agenda-mode/utils)
 
+(defun node-record (node)
+  "the task-record behind agenda NODE, or nil."
+  (typecase node
+    (cltpt/agenda:task-record node)
+    (cltpt/agenda:agenda-overdue-node (cltpt/agenda:agenda-overdue-node-record node))))
+
 (defun task-record-location (node)
-  "extract the file path and text object from a task-record NODE.
-returns (values filepath text-obj) or nil if NODE is not a task-record."
-  (when (typep node 'cltpt/agenda:task-record)
-    (let* ((task (cltpt/agenda:task-record-task node))
-           (roam-node (cltpt/agenda:task-node task))
-           (filepath (cltpt/roam:node-file roam-node))
-           (text-obj (cltpt/roam:node-text-obj roam-node)))
-      (values filepath text-obj))))
+  "extract the file path and text object from the task-record behind NODE.
+returns (values filepath text-obj) or nil if NODE has no task-record."
+  (let ((rec (node-record node)))
+    (when rec
+      (let* ((task (cltpt/agenda:task-record-task rec))
+             (roam-node (cltpt/agenda:task-node task))
+             (filepath (cltpt/roam:node-file roam-node))
+             (text-obj (cltpt/roam:node-text-obj roam-node)))
+        (values filepath text-obj)))))
 
 (defun node-timestamp (node)
   "extract a comparable timestamp from a task-record's time.
 returns nil if node has no time or is not a task-record."
-  (when (typep node 'cltpt/agenda:task-record)
+  (when (and (typep node 'cltpt/agenda:task-record)
+             (not (cltpt/agenda:task-record-date-only-p node)))
     (let ((time (cltpt/agenda:task-record-time node)))
       (when time
         (if (typep time 'cltpt/agenda:time-range)
