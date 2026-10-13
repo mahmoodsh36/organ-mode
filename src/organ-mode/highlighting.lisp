@@ -381,9 +381,13 @@
                                   (cltpt/base:text-object-contents-end obj)))
                  ;; apply 1+ to contents-begin because the contents of the block begin
                  ;; at the end of the line with the opening tag and we want the next line instead.
-                 (start-point (organ/utils:char-offset-to-point buf (1+ contents-begin)))
-                 (end-point (organ/utils:char-offset-to-point buf contents-end)))
-            (when syntax-table
+                 ;; snap end to the last column of the previous line, not the first column of
+                 ;; the #+end_src line
+                 (start-offset (1+ contents-begin))
+                 (end-offset (max start-offset (1- contents-end)))
+                 (start-point (organ/utils:char-offset-to-point buf start-offset))
+                 (end-point (organ/utils:char-offset-to-point buf end-offset)))
+            (when (and syntax-table (< start-offset end-offset))
               (lem:set-region-major-mode start-point end-point mode)
               (lem:syntax-scan-region start-point
                                       end-point
