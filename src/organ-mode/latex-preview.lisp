@@ -246,7 +246,7 @@ this is useful for example in the case of `org-latex-env' which contains more th
                      :end-point-kind :right-inserting))
            (preview (make-preview
                      :overlay overlay
-                     :snippet (cltpt/base:text-object-contents obj)
+                     :snippet (cltpt/latex:expanded-latex obj)
                      :inline-p (cltpt/base:text-object-property obj :is-inline))))
       (lem:overlay-put overlay :latex-preview preview)
       (lem:overlay-put overlay
@@ -349,7 +349,7 @@ else `:ok'."
           (setf (preview-inline-p preview)
                 (cltpt/base:text-object-property obj :is-inline))
           (render-preview preview)
-          (let ((snippet (cltpt/base:text-object-contents obj)))
+          (let ((snippet (cltpt/latex:expanded-latex obj)))
             (if (string= snippet (preview-snippet preview))
                 :ok
                 (progn
