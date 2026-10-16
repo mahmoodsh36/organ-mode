@@ -300,8 +300,8 @@ returns the new forest. falls back to the stored agenda when `*organ-files*' is 
                          (format nil
                                  "- State ~A from ~A ~A"
                                  ;; we shouldnt hardcode the padding length but thats the way org-mode does it
-                                 (pad-to (format nil "\"~A\"" new-state-name-str) 13)
-                                 (pad-to (format nil "\"~A\"" old-state-name) 13)
+                                 (pad-to (format nil "\"~A\"" new-state-name-str) 12)
+                                 (pad-to (format nil "\"~A\"" old-state-name) 12)
                                  (organ/utils:format-inactive-timestamp-with-time))))
                       (if (and is-terminal (cltpt/agenda:task-repeating-p task))
                           ;; finishing a repeating task only hides occurrences up to now (like
