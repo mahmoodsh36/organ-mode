@@ -141,13 +141,10 @@ when nil, it will only reformat the table and the cursor will remain in the last
     (organ-redraw-buffer buf)))
 
 (defun update-tree (start-point end-point length)
-  "updates the organ-mode AST of the current buffer."
-  (let* ((buf (lem:current-buffer))
-         (buffer-contents (lem:buffer-text buf))
-         (new-text (lem:points-to-string start-point end-point))
-         (begin-pos (1- (lem:position-at-point start-point)))
-         (end-pos (1- (lem:position-at-point end-point)))
-         (cltpt-tree (lem:buffer-value buf 'cltpt-tree)))
+  "updates the organ-mode AST of the buffer that changed."
+  (declare (ignore end-point length))
+  ;; the changed buffer, not the current one: code may edit an org buffer from elsewhere
+  (let ((buf (lem:point-buffer start-point)))
     (setf (lem:buffer-value buf 'cltpt-tree)
           (cltpt/base:parse cltpt/org-mode:*org-mode* (lem:buffer-text buf)))
     (organ-redraw-buffer buf)))
