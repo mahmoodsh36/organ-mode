@@ -9,6 +9,7 @@
   (:export
    :*organ-files*
    :*agenda-timestamp-range* :*agenda-include-done* :*agenda-first-repeat-only*
+   :*agenda-include-undated*
    :*organ-keymap*
    :*roam-list-nodes-format* :*roam-titles-include-id*
    :*roam-cache-enabled* :roam-cache-invalidate
@@ -28,6 +29,10 @@
 (defvar *agenda-first-repeat-only*
   nil
   "when non-nil, show only the first occurrence of each repeating task in the agenda view.")
+
+(defvar *agenda-include-undated*
+  t
+  "when non-nil (default), show tasks with no timestamp.")
 
 ;; custom infix type for prompting a timestamp range via two date inputs.
 (defclass lem/transient::timestamp-range (lem/transient::infix)
@@ -90,6 +95,10 @@
       :type 'toggle
       :description "show only first repeat"
       :variable '*agenda-first-repeat-only*)
+     (:key "U"
+      :type 'toggle
+      :description "show undated"
+      :variable '*agenda-include-undated*)
      (:key "R"
       :type 'timestamp-range
       :description "timestamp range"
@@ -297,6 +306,7 @@ uses `cltpt:convert-simple-format' with :title, :root-title, :id, :file, :filena
          :begin-ts (when range (cltpt/agenda:time-range-begin range))
          :end-ts (when range (cltpt/agenda:time-range-end range))
          :include-done *agenda-include-done*
-         :first-repeat-only *agenda-first-repeat-only*)
+         :first-repeat-only *agenda-first-repeat-only*
+         :include-undated *agenda-include-undated*)
         (lem:message "loaded agenda."))
       (lem:message "you must customize *organ-files* first.")))

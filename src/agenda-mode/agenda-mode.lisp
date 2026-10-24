@@ -8,6 +8,10 @@
   t
   "when non-nil, log state changes under the header.")
 
+(defvar *agenda-tag-column*
+  80
+  "column at which entry tags are right-aligned in the agenda view.")
+
 (lem:define-attribute agenda-keyword-attribute
   (t :foreground :base0e))
 
@@ -78,7 +82,11 @@
           (lem:move-to-position (lem:current-point)
                                 (1+ (cltpt/base:text-object-begin-in-root text-obj))))))))
 
-(defun agenda-mode-open (agenda &key begin-ts end-ts include-done first-repeat-only)
+(defun agenda-mode-open (agenda
+                         &key
+                         begin-ts end-ts
+                         include-done (include-undated t)
+                         first-repeat-only)
   (let ((buffer (lem:make-buffer "*agenda*")))
     (lem:change-buffer-mode buffer 'agenda-mode)
     (setf (lem:buffer-value buffer 'agenda) agenda)
@@ -87,12 +95,14 @@
     (setf (lem:buffer-value buffer 'agenda-end-ts) end-ts)
     (setf (lem:buffer-value buffer 'agenda-include-done) include-done)
     (setf (lem:buffer-value buffer 'agenda-first-repeat-only) first-repeat-only)
+    (setf (lem:buffer-value buffer 'agenda-include-undated) include-undated)
     (let ((forest (cltpt/agenda:build-agenda-forest
                    agenda
                    :begin-ts begin-ts
                    :end-ts end-ts
                    :include-done include-done
-                   :first-repeat-only first-repeat-only)))
+                   :first-repeat-only first-repeat-only
+                   :include-undated include-undated)))
       (organ/outline-mode:set-outline-forest buffer forest)
       (organ/outline-mode:render-outline buffer forest)
       (let ((point (lem:buffer-point buffer)))
@@ -112,16 +122,19 @@ returns the new forest. falls back to the stored agenda when `*organ-files*' is 
          (end-ts (lem:buffer-value buffer 'agenda-end-ts))
          (include-done (lem:buffer-value buffer 'agenda-include-done))
          (first-repeat-only (lem:buffer-value buffer 'agenda-first-repeat-only))
+         (include-undated (lem:buffer-value buffer 'agenda-include-undated))
          (agenda (if organ/roam:*organ-files*
                      (cltpt/agenda:from-roamer (organ/roam:current-roamer))
                      (lem:buffer-value buffer 'agenda))))
     (setf (lem:buffer-value buffer 'agenda) agenda)
+    (setf (lem:buffer-value buffer 'agenda-include-undated) include-undated)
     (let ((forest (cltpt/agenda:build-agenda-forest
                    agenda
                    :begin-ts begin-ts
                    :end-ts end-ts
                    :include-done include-done
-                   :first-repeat-only first-repeat-only)))
+                   :first-repeat-only first-repeat-only
+                   :include-undated include-undated)))
       (organ/outline-mode:set-outline-forest buffer forest)
       (organ/outline-mode:render-outline buffer forest)
       forest)))
@@ -143,79 +156,90 @@ returns the new forest. falls back to the stored agenda when `*organ-files*' is 
       (agenda-rebuild-buffer buffer)
       (agenda-restore-line buffer line))))
 
+(defun render-agenda-entry (node point depth task &key time-str prefix-keyword)
+  "render one agenda line for TASK at POINT.
+NODE: the display node.
+TIME-STR: the preformatted timestamp.
+PREFIX-KEYWORD: e.g. \"Scheduled:\".
+this should stay in-sync with `cltpt/agenda::record-outline-text'."
+  (let* ((indent (make-string (* depth 2) :initial-element #\space))
+         (state-name (princ-to-string
+                      (cltpt/agenda:state-name (cltpt/agenda:task-state task))))
+         (title (cltpt/agenda:task-title task))
+         (tags (cltpt/agenda:task-tags task)))
+    (lem:insert-string point indent)
+    ;; add the tree connector symbol based on whether node has children
+    (if (cltpt/tree/outline:could-expand node)
+        (lem:insert-string point
+                           (if (cltpt/tree/outline:should-expand node)
+                               "- "
+                               "+ "))
+        (lem:insert-string point "  "))
+    ;; capture start position after indentation (clickable region starts here)
+    (let ((content-start-pos (lem:copy-point point :temporary)))
+      (when time-str
+        (lem:insert-string point time-str :attribute 'agenda-time-attribute)
+        (lem:insert-string point " ----- "))
+      (when prefix-keyword
+        (lem:insert-string point prefix-keyword :attribute 'agenda-keyword-attribute)
+        (lem:insert-string point (make-string (max 1 (- 13 (length prefix-keyword)))
+                                              :initial-element #\space)))
+      ;; state name without parentheses
+      (lem:insert-string point state-name :attribute 'agenda-state-attribute)
+      (lem:insert-string point " ")
+      ;; title
+      (lem:insert-string point title)
+      ;; right-aligned tags
+      (when tags
+        (let* ((tag-str (format nil ":~{~A~^:~}:" tags))
+               (tag-column *agenda-tag-column*)
+               (current-col (lem:point-column point))
+               (padding (max 1 (- tag-column current-col (length tag-str)))))
+          (lem:insert-string point (make-string padding :initial-element #\space))
+          (lem:insert-string point tag-str)))
+      (let ((node-end-pos (lem:copy-point point :temporary)))
+        (lem:insert-character point #\newline)
+        (lem-core::set-clickable
+         content-start-pos
+         node-end-pos
+         (lambda (window clicked-point)
+           (declare (ignore window))
+           (organ/outline-mode::outline-expand-collapse-at-point clicked-point)))
+        (lem:put-text-property content-start-pos node-end-pos :outline-node node)))))
+
 (defun render-task-record (node point depth &optional overdue-days)
   "render task-record NODE, OVERDUE-DAYS replaces the keyword for an overdue prefix."
-  (let* ((indent (make-string (* depth 2) :initial-element #\space)))
-    ;; this should be in-sync with `cltpt/agenda::record-outline-text'
-    (labels ((format-ts (ts)
-               (local-time:format-timestring
-                nil
-                ts
-                :format cltpt/agenda:*agenda-time-format*))
-             (format-time (time)
-               (if (typep time 'cltpt/agenda:time-range)
-                   (format nil
-                           "~A--~A"
-                           (format-ts (cltpt/agenda:time-range-begin time))
-                           (format-ts (cltpt/agenda:time-range-end time)))
-                   (format-ts time))))
-      (let* ((task1 (cltpt/agenda:task-record-task node))
-             (time (unless (or overdue-days (cltpt/agenda:task-record-date-only-p node))
-                     (cltpt/agenda:task-record-time node)))
-             (state-name (princ-to-string
-                          (cltpt/agenda:state-name (cltpt/agenda:task-state task1))))
-             (title (cltpt/agenda:task-title task1))
-             (prefix-keyword (cond
-                               ((cltpt/agenda:deadline node)
-                                (if overdue-days
-                                    (format nil "~2d d. ago:" overdue-days)
-                                    "Deadline:"))
-                               ((cltpt/agenda:start-task node)
-                                (if overdue-days
-                                    (format nil "Sched.~2dx:" overdue-days)
-                                    "Scheduled:")))))
-        (lem:insert-string point indent)
-        ;; add the tree connector symbol based on whether node has children
-        (if (cltpt/tree/outline:could-expand node)
-            (lem:insert-string point
-                               (if (cltpt/tree/outline:should-expand node)
-                                   "- "
-                                   "+ "))
-            (lem:insert-string point "  "))
-        ;; capture start position after indentation (clickable region starts here)
-        (let ((content-start-pos (lem:copy-point point :temporary)))
-          (when time
-            (lem:insert-string point
-                               (format-time time)
-                               :attribute 'agenda-time-attribute)
-            (lem:insert-string point " ----- "))
-          (when prefix-keyword
-            (lem:insert-string point prefix-keyword :attribute 'agenda-keyword-attribute)
-            (lem:insert-string point (make-string (max 1 (- 13 (length prefix-keyword)))
-                                                  :initial-element #\space)))
-          ;; state name without parentheses
-          (lem:insert-string point state-name :attribute 'agenda-state-attribute)
-          (lem:insert-string point " ")
-          ;; title
-          (lem:insert-string point title)
-          ;; right-aligned tags
-          (let ((tags (cltpt/agenda:task-tags task1)))
-            (when tags
-              (let* ((tag-str (format nil ":~{~A~^:~}:" tags))
-                     (tag-column 80)
-                     (current-col (lem:point-column point))
-                     (padding (max 1 (- tag-column current-col (length tag-str)))))
-                (lem:insert-string point (make-string padding :initial-element #\space))
-                (lem:insert-string point tag-str))))
-          (let ((node-end-pos (lem:copy-point point :temporary)))
-            (lem:insert-character point #\newline)
-            (lem-core::set-clickable
-             content-start-pos
-             node-end-pos
-             (lambda (window clicked-point)
-               (declare (ignore window))
-               (organ/outline-mode::outline-expand-collapse-at-point clicked-point)))
-            (lem:put-text-property content-start-pos node-end-pos :outline-node node)))))))
+  ;; this should be in-sync with `cltpt/agenda::record-outline-text'
+  (labels ((format-ts (ts)
+             (local-time:format-timestring
+              nil
+              ts
+              :format cltpt/agenda:*agenda-time-format*))
+           (format-time (time)
+             (if (typep time 'cltpt/agenda:time-range)
+                 (format nil
+                         "~A--~A"
+                         (format-ts (cltpt/agenda:time-range-begin time))
+                         (format-ts (cltpt/agenda:time-range-end time)))
+                 (format-ts time))))
+    (let* ((task (cltpt/agenda:task-record-task node))
+           (time (unless (or overdue-days (cltpt/agenda:task-record-date-only-p node))
+                   (cltpt/agenda:task-record-time node)))
+           (prefix-keyword (cond
+                             ((cltpt/agenda:deadline node)
+                              (if overdue-days
+                                  (format nil "~2d d. ago:" overdue-days)
+                                  "Deadline:"))
+                             ((cltpt/agenda:start-task node)
+                              (if overdue-days
+                                  (format nil "Sched.~2dx:" overdue-days)
+                                  "Scheduled:")))))
+      (render-agenda-entry node
+                           point
+                           depth
+                           task
+                           :time-str (when time (format-time time))
+                           :prefix-keyword prefix-keyword))))
 
 (defmethod organ/outline-mode:interactive-render-node ((node cltpt/agenda:task-record)
                                                        buffer
@@ -231,6 +255,12 @@ returns the new forest. falls back to the stored agenda when `*organ-files*' is 
                       point
                       depth
                       (cltpt/agenda:agenda-overdue-node-days node)))
+
+(defmethod organ/outline-mode:interactive-render-node ((node cltpt/agenda:agenda-undated-node)
+                                                       buffer
+                                                       point
+                                                       depth)
+  (render-agenda-entry node point depth (cltpt/agenda:agenda-undated-node-task node)))
 
 (defun current-header ()
   (let ((header))

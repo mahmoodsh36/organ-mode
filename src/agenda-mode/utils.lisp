@@ -19,12 +19,11 @@
     (cltpt/agenda:agenda-overdue-node (cltpt/agenda:agenda-overdue-node-record node))))
 
 (defun task-record-location (node)
-  "extract the file path and text object from the task-record behind NODE.
-returns (values filepath text-obj) or nil if NODE has no task-record."
-  (let ((rec (node-record node)))
-    (when rec
-      (let* ((task (cltpt/agenda:task-record-task rec))
-             (roam-node (cltpt/agenda:task-node task))
+  "extract the file path and text object from the task behind NODE.
+returns (values filepath text-obj) or nil if NODE has no task."
+  (let ((task (cltpt/agenda:agenda-node-task node)))
+    (when task
+      (let* ((roam-node (cltpt/agenda:task-node task))
              (filepath (cltpt/roam:node-file roam-node))
              (text-obj (cltpt/roam:node-text-obj roam-node)))
         (values filepath text-obj)))))
