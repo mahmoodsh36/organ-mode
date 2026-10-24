@@ -124,7 +124,9 @@ returns the new forest. falls back to the stored agenda when `*organ-files*' is 
          (first-repeat-only (lem:buffer-value buffer 'agenda-first-repeat-only))
          (include-undated (lem:buffer-value buffer 'agenda-include-undated))
          (agenda (if organ/roam:*organ-files*
-                     (cltpt/agenda:from-roamer (organ/roam:current-roamer))
+                     (cltpt/agenda:from-roamer (organ/roam:current-roamer)
+                                               :include-tags organ/roam:*agenda-include-tags*
+                                               :exclude-tags organ/roam:*agenda-exclude-tags*)
                      (lem:buffer-value buffer 'agenda))))
     (setf (lem:buffer-value buffer 'agenda) agenda)
     (setf (lem:buffer-value buffer 'agenda-include-undated) include-undated)

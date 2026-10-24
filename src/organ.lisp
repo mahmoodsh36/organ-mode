@@ -2,6 +2,7 @@
   (:use :cl :lem :lem/transient)
   (:import-from :organ/roam
    :*organ-files*
+   :*agenda-include-tags* :*agenda-exclude-tags*
    :*roam-cache-enabled* :roam-cache-invalidate
    :*roam-cache-auto-rescan* :*roam-cache-rescan-interval*
    :current-roamer
@@ -9,7 +10,7 @@
   (:export
    :*organ-files*
    :*agenda-timestamp-range* :*agenda-include-done* :*agenda-first-repeat-only*
-   :*agenda-include-undated*
+   :*agenda-include-undated* :*agenda-exclude-tags* :*agenda-include-tags*
    :*organ-keymap*
    :*roam-list-nodes-format* :*roam-titles-include-id*
    :*roam-cache-enabled* :roam-cache-invalidate
@@ -299,7 +300,7 @@ uses `cltpt:convert-simple-format' with :title, :root-title, :id, :file, :filena
 (lem:define-command agenda-open () ()
   (if *organ-files*
       (let* ((rmr (current-roamer))
-             (agenda (cltpt/agenda:from-roamer rmr))
+             (agenda (cltpt/agenda:from-roamer rmr :include-tags *agenda-include-tags* :exclude-tags *agenda-exclude-tags*))
              (range *agenda-timestamp-range*))
         (organ/agenda-mode:agenda-mode-open
          agenda

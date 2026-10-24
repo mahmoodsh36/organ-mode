@@ -2,6 +2,7 @@
   (:use :cl)
   (:export
    :*organ-files*
+   :*agenda-include-tags* :*agenda-exclude-tags*
    :*roam-cache-enabled* :roam-cache-invalidate
    :*roam-cache-auto-rescan* :*roam-cache-rescan-interval*
    :*roam-titles-include-id* :roam-rescan :roam-cache-auto-rescan-toggle
@@ -12,6 +13,16 @@
 (defvar *organ-files*
   nil
   "a list of rules according to which to look for and parse files. see `cltpt/roam:find-files'.")
+
+(defvar *agenda-include-tags*
+  nil
+  "list of tags for tasks to include in the agenda view.
+only tasks with an ancestor carrying one of these tags are shown (before `*agenda-exclude-tags*' is applied).")
+
+(defvar *agenda-exclude-tags*
+  nil
+  "list of tags for tasks to exclude from the agenda view.
+tasks with an ancestor carrying one of these tags are dropped, this wins over `*agenda-include-tags*'.")
 
 (defvar *roam-cache-enabled*
   t
