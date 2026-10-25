@@ -31,13 +31,18 @@ returns (values filepath text-obj) or nil if NODE has no task."
 (defun node-timestamp (node)
   "extract a comparable timestamp from a task-record's time.
 returns nil if node has no time or is not a task-record."
-  (when (and (typep node 'cltpt/agenda:task-record)
-             (not (cltpt/agenda:task-record-date-only-p node)))
-    (let ((time (cltpt/agenda:task-record-time node)))
-      (when time
-        (if (typep time 'cltpt/agenda:time-range)
-            (cltpt/agenda:time-range-begin time)
-            time)))))
+  (let ((record (typecase node
+                  (cltpt/agenda:task-record node)
+                  (cltpt/agenda:agenda-overdue-node
+                   (cltpt/agenda:agenda-overdue-node-record node))
+                  (t nil))))
+    (when (and record
+               (not (cltpt/agenda:task-record-date-only-p record)))
+      (let ((time (cltpt/agenda:task-record-time record)))
+        (when time
+          (if (typep time 'cltpt/agenda:time-range)
+              (cltpt/agenda:time-range-begin time)
+              time))))))
 
 ;; doing things this way wouldnt be necessary if we were to keep track of which line contains
 ;; which entry during rendering, but it may be more modification-tolerant if we were to allow

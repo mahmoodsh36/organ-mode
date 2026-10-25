@@ -343,7 +343,10 @@ when PREDICATE returns non-NIL, return that line number."
          (buffer (lem:point-buffer point)))
     (when current-depth
       (let ((predicate (lambda (node)
-                         (and node (= (compute-node-depth node) current-depth)))))
+                         (and node
+                              (let ((depth (compute-node-depth node)))
+                                (and (numberp depth)
+                                     (= depth current-depth)))))))
         (ecase direction
           (:next (scan-lines-forward buffer (1+ current-line) predicate))
           (:previous (scan-lines-backward buffer (1- current-line) predicate)))))))
@@ -384,13 +387,15 @@ when PREDICATE returns non-NIL, return that line number."
         ;; last child. if we have a parent, go to next node at parent's depth
         (when parent
           (let ((parent-depth (compute-node-depth parent)))
-            (scan-lines-forward
-             buffer
-             (1+ current-line)
-             (lambda (node)
-               (and node
-                    (= (compute-node-depth node) parent-depth)
-                    (not (eql node parent))))))))))
+            (when (numberp parent-depth)
+              (scan-lines-forward
+               buffer
+               (1+ current-line)
+               (lambda (node)
+                 (and node
+                      (let ((depth (compute-node-depth node)))
+                        (and (numberp depth)
+                             (= depth parent-depth))))))))))))
 
 (defun find-previous-true-sibling (buffer current-line siblings current-index parent)
   "find the previous true sibling's line number."

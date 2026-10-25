@@ -209,8 +209,8 @@ this should stay in-sync with `cltpt/agenda::record-outline-text'."
            (organ/outline-mode::outline-expand-collapse-at-point clicked-point)))
         (lem:put-text-property content-start-pos node-end-pos :outline-node node)))))
 
-(defun render-task-record (node point depth &optional overdue-days)
-  "render task-record NODE, OVERDUE-DAYS replaces the keyword for an overdue prefix."
+(defun render-task-record (node point depth)
+  "render NODE which is a task-record or an agenda-overdue-node wrapper."
   ;; this should be in-sync with `cltpt/agenda::record-outline-text'
   (labels ((format-ts (ts)
              (local-time:format-timestring
@@ -224,15 +224,18 @@ this should stay in-sync with `cltpt/agenda::record-outline-text'."
                          (format-ts (cltpt/agenda:time-range-begin time))
                          (format-ts (cltpt/agenda:time-range-end time)))
                  (format-ts time))))
-    (let* ((task (cltpt/agenda:task-record-task node))
-           (time (unless (or overdue-days (cltpt/agenda:task-record-date-only-p node))
-                   (cltpt/agenda:task-record-time node)))
+    (let* ((record (node-record node))
+           (overdue-days (when (typep node 'cltpt/agenda:agenda-overdue-node)
+                           (cltpt/agenda:agenda-overdue-node-days node)))
+           (task (cltpt/agenda:task-record-task record))
+           (time (unless (or overdue-days (cltpt/agenda:task-record-date-only-p record))
+                   (cltpt/agenda:task-record-time record)))
            (prefix-keyword (cond
-                             ((cltpt/agenda:deadline node)
+                             ((cltpt/agenda:deadline record)
                               (if overdue-days
                                   (format nil "~2d d. ago:" overdue-days)
                                   "Deadline:"))
-                             ((cltpt/agenda:start-task node)
+                             ((cltpt/agenda:start-task record)
                               (if overdue-days
                                   (format nil "Sched.~2dx:" overdue-days)
                                   "Scheduled:")))))
@@ -253,10 +256,7 @@ this should stay in-sync with `cltpt/agenda::record-outline-text'."
                                                        buffer
                                                        point
                                                        depth)
-  (render-task-record (cltpt/agenda:agenda-overdue-node-record node)
-                      point
-                      depth
-                      (cltpt/agenda:agenda-overdue-node-days node)))
+  (render-task-record node point depth))
 
 (defmethod organ/outline-mode:interactive-render-node ((node cltpt/agenda:agenda-undated-node)
                                                        buffer
