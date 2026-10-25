@@ -30,7 +30,7 @@
 
 (defun parse-org (text)
   "parse org TEXT into a cltpt tree."
-  (cltpt/base:parse cltpt/org-mode:*org-mode* text))
+  (cltpt/base:parse :org-mode text))
 
 (defun make-organ-buffer (name text)
   "create a lem buffer with NAME, insert TEXT, parse the organ tree, and return (values buffer tree)."

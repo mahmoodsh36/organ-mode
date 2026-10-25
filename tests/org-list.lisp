@@ -100,7 +100,7 @@ and return (values buffer tree list-obj) where list-obj is the first org-list ob
 
 (defun reparse-list (buffer)
   "re-parse the buffer and return the first org-list object."
-  (let* ((new-tree (cltpt/base:parse cltpt/org-mode:*org-mode* (lem:buffer-text buffer)))
+  (let* ((new-tree (cltpt/base:parse :org-mode (lem:buffer-text buffer)))
          (new-list (find-if (lambda (c) (typep c 'cltpt/org-mode:org-list))
                             (cltpt/base:text-object-children new-tree))))
     (setf (lem:buffer-value buffer 'organ/organ-mode::cltpt-tree) new-tree)

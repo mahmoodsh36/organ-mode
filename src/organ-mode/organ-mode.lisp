@@ -136,7 +136,7 @@ when nil, it will only reformat the table and the cursor will remain in the last
 (defun init-tree ()
   (let* ((buf (lem:current-buffer))
          (buffer-contents (lem:buffer-text buf))
-         (cltpt-tree (cltpt/base:parse cltpt/org-mode:*org-mode* buffer-contents)))
+         (cltpt-tree (cltpt/base:parse :org-mode buffer-contents)))
     (setf (lem:buffer-value buf 'cltpt-tree) cltpt-tree)
     (organ-redraw-buffer buf)))
 
@@ -146,7 +146,7 @@ when nil, it will only reformat the table and the cursor will remain in the last
   ;; the changed buffer, not the current one: code may edit an org buffer from elsewhere
   (let ((buf (lem:point-buffer start-point)))
     (setf (lem:buffer-value buf 'cltpt-tree)
-          (cltpt/base:parse cltpt/org-mode:*org-mode* (lem:buffer-text buf)))
+          (cltpt/base:parse :org-mode (lem:buffer-text buf)))
     (organ-redraw-buffer buf)))
 
 (defun current-tree ()
@@ -308,7 +308,7 @@ when nil, it will only reformat the table and the cursor will remain in the last
 
 (defun convert-buffer (dest-format)
   (let* ((tree (current-tree))
-         (output (cltpt:convert-document cltpt/org-mode:*org-mode* dest-format tree)))
+         (output (cltpt:convert-document :org-mode dest-format tree)))
     output))
 
 (defun convert-to-buffer (dest-format)
@@ -321,8 +321,8 @@ when nil, it will only reformat the table and the cursor will remain in the last
 (defun convert-to-file (dest-format)
   "export the current buffer to DEST-FORMAT, write to a temp file, and display it.
 returns the temp file path."
-  (let* ((extension (cond ((eq dest-format cltpt:*html*) "html")
-                          ((eq dest-format cltpt:*latex*) "tex")
+  (let* ((extension (cond ((eq dest-format :html) "html")
+                          ((eq dest-format :latex) "tex")
                           (t "txt")))
          (temp-file (cltpt/file-utils:temp-file "organ-export" extension))
          (buffer (lem:find-file-buffer temp-file))
@@ -335,20 +335,20 @@ returns the temp file path."
     temp-file))
 
 (lem:define-command organ-export-to-latex-file () ()
-  (convert-to-file cltpt:*latex*))
+  (convert-to-file :latex))
 
 (lem:define-command organ-export-to-latex-buffer () ()
-  (convert-to-buffer cltpt:*latex*))
+  (convert-to-buffer :latex))
 
 (lem:define-command organ-export-to-html-file () ()
-  (convert-to-file cltpt:*html*))
+  (convert-to-file :html))
 
 (lem:define-command organ-export-to-html-buffer () ()
-  (convert-to-buffer cltpt:*html*))
+  (convert-to-buffer :html))
 
 (lem:define-command organ-export-to-html-and-open () ()
   "export the current buffer to html and open it externally."
-  (let ((html-file (convert-to-file cltpt:*html*)))
+  (let ((html-file (convert-to-file :html)))
     (organ/utils:open-file-externally html-file)))
 
 (lem:define-command organ-open-attach-dir () ()

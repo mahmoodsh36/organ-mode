@@ -274,7 +274,7 @@ body beta
                   (lem:move-point (lem:current-point)
                                   (organ/utils:char-offset-to-point buffer original-pos))
                   (organ/organ-mode::org-header-move first-header 1)
-                  (let* ((new-tree (cltpt/base:parse cltpt/org-mode:*org-mode*
+                  (let* ((new-tree (cltpt/base:parse :org-mode
                                                      (lem:buffer-text buffer)))
                          (new-headers
                            (sort (remove-if-not

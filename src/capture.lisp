@@ -53,7 +53,7 @@
                        (lambda ()
                          (cltpt:convert-simple-format (getf template :entry)))
                        :organ/capture))
-               (parse-result (cltpt:parse cltpt/base:*simple-format* (getf template :entry)))
+               (parse-result (cltpt:parse :simple (getf template :entry)))
                (cursor-pos (loop for obj in (cltpt/base:list-children-recursively parse-result)
                                  when (and (typep obj 'cltpt/base:post-lexer-text-macro)
                                            ;; this wouldnt work because we havent bound cursor
