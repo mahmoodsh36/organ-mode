@@ -310,7 +310,7 @@ cltpt's cache serves anything seen before unless RECOMPILE says otherwise."
 
 (defun place-buffer-previews (buffer &key recompile)
   (let ((previews (mapcar (lambda (obj) (ensure-preview buffer obj))
-                          (latex-objects (lem:buffer-value buffer 'cltpt-tree)))))
+                          (latex-objects (current-tree buffer)))))
     (update-preview-images previews :recompile recompile)
     previews))
 
@@ -368,7 +368,7 @@ duplicates are deleted on the way: two converge when an edit merges their fragme
 
 (defun sync-buffer-previews (buffer)
   "resync every preview in BUFFER against its tree and recompile the ones whose source changed."
-  (let ((tree (lem:buffer-value buffer 'cltpt-tree))
+  (let ((tree (current-tree buffer))
         (stale))
     (when tree
       (dolist (preview (buffer-previews buffer))
@@ -381,41 +381,14 @@ duplicates are deleted on the way: two converge when an edit merges their fragme
       (when stale
         (update-preview-images stale)))))
 
-(defun buffer-quiet-ms (buffer)
-  "milliseconds since BUFFER last changed, or the full delay when no change was ever recorded."
-  (let ((last (lem:buffer-value buffer 'latex-preview-last-change)))
-    (if last
-        (round (* 1000 (- (get-internal-real-time) last))
-               internal-time-units-per-second)
-        *organ-latex-preview-debounce*)))
-
-(defun schedule-preview-sync (buffer &optional (delay *organ-latex-preview-debounce*))
-  "arrange for BUFFER's previews to be resynced once the current burst of edits settles.
-edits themselves only record when they happened. a timer that goes off to find the buffer changed
-in the meantime sleeps again for the rest of the quiet period, instead of being cancelled and
-replaced on every keystroke."
-  (unless (lem:buffer-value buffer 'latex-preview-timer)
-    (setf (lem:buffer-value buffer 'latex-preview-timer)
-          (lem:start-timer
-           (lem:make-timer
-            (lambda ()
-              (setf (lem:buffer-value buffer 'latex-preview-timer) nil)
-              (when (member buffer (lem:buffer-list))
-                (let ((remaining (- *organ-latex-preview-debounce* (buffer-quiet-ms buffer))))
-                  (if (plusp remaining)
-                      (schedule-preview-sync buffer remaining)
-                      (sync-buffer-previews buffer)))))
-            :name "organ-latex-preview-debounce")
-           delay
-           :repeat nil))))
-
 (defun preview-after-change (start end old-len)
   (let ((buffer (lem:point-buffer start)))
     (when (or (lem:mode-active-p buffer 'organ-latex-preview-mode)
               (buffer-previews buffer))
-      (setf (lem:buffer-value buffer 'latex-preview-last-change)
-            (get-internal-real-time))
-      (schedule-preview-sync buffer))))
+      (organ/utils:debounce buffer
+                            'latex-preview-debounce
+                            *organ-latex-preview-debounce*
+                            #'sync-buffer-previews))))
 
 (defun ensure-preview-hook (buffer)
   "make sure BUFFER reports its changes to the preview machinery."

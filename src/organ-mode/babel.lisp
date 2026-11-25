@@ -49,7 +49,7 @@ we reparse the buffer into a new tree instead of modifying the old one."
 (defun insert-src-block-results (buffer marker output)
   "write OUTPUT as the results of the src block at MARKER in BUFFER. returns NIL if the block is gone."
   (lem:with-current-buffer buffer
-    (let ((blk (organ/utils:find-node-at-point (lem:buffer-value buffer 'cltpt-tree)
+    (let ((blk (organ/utils:find-node-at-point (current-tree buffer)
                                                marker
                                                'cltpt/org-mode:org-src-block)))
       (when blk

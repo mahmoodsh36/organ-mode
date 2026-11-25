@@ -19,6 +19,7 @@
    :*organ-latex-preview-foreground*
    :*organ-latex-preview-types*
    :*organ-latex-preview-debounce*
+   :*organ-redraw-debounce*
    :organ-babel-execute-src-block))
 
 (in-package :organ/organ-mode)
@@ -32,6 +33,10 @@
 (defvar *organ-enable-incremental-changes*
   nil
   "whether to enable incremental changes in `organ-mode'.")
+
+(defvar *organ-redraw-debounce*
+  150
+  "milliseconds after the last buffer change before highlighting is redrawn.")
 
 (defvar *log-reschedule*
   t
@@ -140,17 +145,25 @@ when nil, it will only reformat the table and the cursor will remain in the last
     (setf (lem:buffer-value buf 'cltpt-tree) cltpt-tree)
     (organ-redraw-buffer buf)))
 
+(defun redraw-after-change (buf)
+  (organ-redraw-buffer buf)
+  (lem:redraw-display))
+
 (defun update-tree (start-point end-point length)
-  "updates the organ-mode AST of the buffer that changed."
+  "mark the changed buffer's tree stale and schedule a redraw, see `current-tree'."
   (declare (ignore end-point length))
   ;; the changed buffer, not the current one: code may edit an org buffer from elsewhere
   (let ((buf (lem:point-buffer start-point)))
+    (setf (lem:buffer-value buf 'cltpt-tree-stale) t)
+    (organ/utils:debounce buf 'redraw-debounce *organ-redraw-debounce* #'redraw-after-change)))
+
+(defun current-tree (&optional (buf (lem:current-buffer)))
+  "BUF's tree, reparsed first if BUF changed since the last parse."
+  (when (lem:buffer-value buf 'cltpt-tree-stale)
     (setf (lem:buffer-value buf 'cltpt-tree)
           (cltpt/base:parse :org-mode (lem:buffer-text buf)))
-    (organ-redraw-buffer buf)))
-
-(defun current-tree ()
-  (lem:buffer-value (lem:current-buffer) 'cltpt-tree))
+    (setf (lem:buffer-value buf 'cltpt-tree-stale) nil))
+  (lem:buffer-value buf 'cltpt-tree))
 
 ;; this used calendar-mode.lisp directly instead of the popup
 ;; (lem:define-command edit-timestamp () ()

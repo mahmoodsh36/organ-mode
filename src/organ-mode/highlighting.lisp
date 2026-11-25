@@ -411,7 +411,7 @@
     (dolist (ov (lem:buffer-overlays buf))
       (setf (gethash ov existing) t))
     (cltpt/base:map-text-object-with-pos-in-root
-     (lem:buffer-value buf 'cltpt-tree)
+     (current-tree buf)
      (lambda (obj parent-pos)
        (setf (cltpt/base:text-object-property obj :parent-pos) parent-pos)
        (text-object-overlays obj buf)

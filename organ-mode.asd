@@ -5,7 +5,8 @@
   :depends-on ("cltpt" "local-time" "lem/core" "lem-transient" "lem-vi-mode" "uiop")
   :components ((:module "utils"
                 :pathname "src/"
-                :components ((:file "utils")))
+                :components ((:file "utils")
+                             (:file "debounce")))
                (:module "outline-mode"
                 :pathname "src/agenda-mode/"
                 :components ((:file "outline-mode")))

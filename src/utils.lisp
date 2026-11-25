@@ -10,7 +10,8 @@
    :find-node-at-pos-ignore-newline
    :insert-header-log-entry :set-header-property
    :append-header-action :find-header-action :remove-header-action
-   :*open-file-command* :open-file-externally))
+   :*open-file-command* :open-file-externally
+   :debounce))
 
 (in-package :organ/utils)
 
